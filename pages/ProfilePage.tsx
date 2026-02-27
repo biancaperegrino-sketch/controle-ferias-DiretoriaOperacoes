@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { AuditLog, UserRole, RegisteredUser } from '../types';
 
+import { db } from '../src/lib/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+
 interface ProfilePageProps {
   logs: AuditLog[];
 }
@@ -29,7 +32,7 @@ interface ProfilePageProps {
 const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
-  const { user, logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers, addLog } = useAuth();
+  const { user, logo, updateLogo, resetLogo, registeredUsers, addLog } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -76,35 +79,35 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
     setIsUserModalOpen(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const email = userFormData.email.toLowerCase().trim();
+    const id = editingUser?.id || Math.random().toString(36).substr(2, 9);
     
+    const userData: RegisteredUser = {
+      id,
+      ...userFormData,
+      email,
+      addedAt: editingUser?.addedAt || new Date().toISOString()
+    };
+
+    await setDoc(doc(db, 'registered_users', id), userData);
+
     if (editingUser) {
-      setRegisteredUsers(prev => prev.map(u => 
-        u.id === editingUser.id ? { ...u, ...userFormData, email } : u
-      ));
       addLog(`Editou acesso do usuário ${userFormData.name}`);
     } else {
-      const newUser: RegisteredUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...userFormData,
-        email,
-        addedAt: new Date().toISOString()
-      };
-      setRegisteredUsers(prev => [...prev, newUser]);
       addLog(`Cadastrou novo acesso para ${userFormData.name}`);
     }
     setIsUserModalOpen(false);
   };
 
-  const handleDeleteUser = (id: string, name: string, email: string) => {
+  const handleDeleteUser = async (id: string, name: string, email: string) => {
     if (email === ROOT_ADMIN_EMAIL) {
       alert("O administrador raiz não pode ser removido.");
       return;
     }
     if (confirm(`Deseja realmente remover o acesso de ${name}?`)) {
-      setRegisteredUsers(prev => prev.filter(u => u.id !== id));
+      await deleteDoc(doc(db, 'registered_users', id));
       addLog(`Removeu acesso do usuário ${name}`);
     }
   };

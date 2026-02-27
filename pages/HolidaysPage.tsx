@@ -25,9 +25,11 @@ import { formatDate } from '../utils/dateUtils';
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
 
+import { db } from '../src/lib/firebase';
+import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+
 interface HolidaysPageProps {
   holidays: Holiday[];
-  setHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
 }
 
 interface RawHolidayRecord {
@@ -39,7 +41,7 @@ interface RawHolidayRecord {
   errors?: string[];
 }
 
-const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays, setHolidays }) => {
+const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
 
@@ -82,21 +84,22 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays, setHolidays }) =>
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const id = editingHoliday?.id || Math.random().toString(36).substr(2, 9);
     const finalHoliday: Holiday = {
-      id: editingHoliday?.id || Math.random().toString(36).substr(2, 9),
+      id,
       name: formData.name,
       date: formData.date,
       type: formData.type,
       state: formData.type === HolidayType.ESTADUAL ? formData.state : undefined
     };
 
+    await setDoc(doc(db, 'holidays', id), finalHoliday);
+    
     if (editingHoliday) {
-      setHolidays(prev => prev.map(h => h.id === editingHoliday.id ? finalHoliday : h));
       addLog(`Editou o feriado ${formData.name}`);
     } else {
-      setHolidays(prev => [...prev, finalHoliday]);
       addLog(`Cadastrou o feriado ${formData.name}`);
     }
     setIsModalOpen(false);
@@ -108,9 +111,9 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays, setHolidays }) =>
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!holidayToDelete || !isAdmin) return;
-    setHolidays(prev => prev.filter(h => h.id !== holidayToDelete.id));
+    await deleteDoc(doc(db, 'holidays', holidayToDelete.id));
     addLog(`Excluiu o feriado ${holidayToDelete.name}`);
     setHolidayToDelete(null);
   };
@@ -248,34 +251,30 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays, setHolidays }) =>
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    const batch = writeBatch(db);
 
-    let newHolidays = replaceExisting ? [] : [...holidays];
+    if (replaceExisting) {
+      // Delete all existing holidays first
+      // Note: This is simplified. For large collections, you'd need a more robust way.
+      holidays.forEach(h => {
+        batch.delete(doc(db, 'holidays', h.id));
+      });
+    }
 
     validRows.forEach(raw => {
-      if (!replaceExisting) {
-        const existingIndex = newHolidays.findIndex(h => 
-          h.date === raw.data && 
-          h.type === raw.tipo && 
-          (raw.tipo === HolidayType.NACIONAL || (raw.tipo === HolidayType.ESTADUAL && h.state === raw.estado))
-        );
-        
-        if (existingIndex !== -1) {
-          newHolidays[existingIndex] = { ...newHolidays[existingIndex], name: raw.nome };
-          return;
-        }
-      }
-
-      newHolidays.push({
-        id: Math.random().toString(36).substr(2, 9),
+      const id = Math.random().toString(36).substr(2, 9);
+      const holidayData = {
+        id,
         name: raw.nome,
         date: raw.data,
         type: raw.tipo as HolidayType,
         state: raw.tipo === HolidayType.ESTADUAL ? raw.estado : undefined
-      });
+      };
+      batch.set(doc(db, 'holidays', id), holidayData);
     });
 
-    setHolidays(newHolidays);
+    await batch.commit();
     addLog(`Importou/Atualizou ${validRows.length} feriados via planilha.`);
     
     setIsProcessing(false);

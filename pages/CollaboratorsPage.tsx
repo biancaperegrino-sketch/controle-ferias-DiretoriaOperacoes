@@ -7,12 +7,14 @@ import { Search, UserPlus, X, Edit2, Trash2, ShieldAlert, Users } from 'lucide-r
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
 
+import { db } from '../src/lib/firebase';
+import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
 interface CollaboratorsPageProps {
   collaborators: Collaborator[];
-  setCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
 }
 
-const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, setCollaborators }) => {
+const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
 
@@ -47,19 +49,17 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingCollaborator) {
-      setCollaborators(prev => prev.map(c => 
-        c.id === editingCollaborator.id ? { ...c, ...formData } : c
-      ));
+      await updateDoc(doc(db, 'collaborators', editingCollaborator.id), formData);
       addLog(`Editou o colaborador ${formData.name}`);
     } else {
-      const newCollaborator: Collaborator = {
-        id: Math.random().toString(36).substr(2, 9),
+      const id = Math.random().toString(36).substr(2, 9);
+      await setDoc(doc(db, 'collaborators', id), {
+        id,
         ...formData
-      };
-      setCollaborators(prev => [...prev, newCollaborator]);
+      });
       addLog(`Cadastrou o colaborador ${formData.name}`);
     }
     setIsModalOpen(false);
@@ -71,9 +71,9 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!collabToDelete || !isAdmin) return;
-    setCollaborators(prev => prev.filter(c => c.id !== collabToDelete.id));
+    await deleteDoc(doc(db, 'collaborators', collabToDelete.id));
     addLog(`Excluiu o colaborador ${collabToDelete.name}`);
     setCollabToDelete(null);
   };

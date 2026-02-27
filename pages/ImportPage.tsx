@@ -16,11 +16,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../App';
 
+import { db } from '../src/lib/firebase';
+import { collection, doc, setDoc, writeBatch, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+
 interface ImportPageProps {
   collaborators: Collaborator[];
-  setCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
   records: VacationRecord[];
-  setRecords: React.Dispatch<React.SetStateAction<VacationRecord[]>>;
 }
 
 interface RawRecord {
@@ -38,7 +39,7 @@ interface RawRecord {
   errors?: string[];
 }
 
-const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators, records, setRecords }) => {
+const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
   
@@ -48,17 +49,23 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
   const [isProcessing, setIsProcessing] = useState(false);
   const [columnMappingError, setColumnMappingError] = useState<string | null>(null);
   
-  const [importHistory, setImportHistory] = useState<ImportHistory[]>(() => {
-    const saved = localStorage.getItem('vacation_import_history');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [importHistory, setImportHistory] = useState<ImportHistory[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const saveImportHistory = (history: ImportHistory) => {
-    const updated = [history, ...importHistory].slice(0, 10);
-    setImportHistory(updated);
-    localStorage.setItem('vacation_import_history', JSON.stringify(updated));
+  // Sync Import History
+  React.useEffect(() => {
+    const q = query(collection(db, 'import_history'), orderBy('date', 'desc'), limit(10));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ImportHistory));
+      setImportHistory(list);
+    });
+    return unsub;
+  }, []);
+
+  const saveImportHistory = async (history: ImportHistory) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    await setDoc(doc(db, 'import_history', id), { ...history, id });
   };
 
   const downloadTemplate = () => {
@@ -209,29 +216,31 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const newCollaborators = [...collaborators];
-    const newRecords = [...records];
+    
+    const batch = writeBatch(db);
+    const tempCollaborators = [...collaborators];
 
     validRows.forEach(raw => {
-      let collab = newCollaborators.find(c => c.name.toLowerCase() === raw.nome.toLowerCase());
+      let collab = tempCollaborators.find(c => c.name.toLowerCase() === raw.nome.toLowerCase());
       if (!collab) {
+        const collabId = Math.random().toString(36).substr(2, 9);
         collab = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: collabId,
           name: raw.nome,
           role: raw.funcao || 'Não informada',
           unit: raw.unidade || 'Não informada',
           state: (raw.estado || 'SP').toUpperCase().substring(0, 2)
         };
-        newCollaborators.push(collab);
+        tempCollaborators.push(collab);
+        batch.set(doc(db, 'collaborators', collabId), collab);
       }
 
       const isInitial = raw.tipo === RequestType.SALDO_INICIAL;
       const businessDays = parseNumber(raw.dias_uteis);
+      const recordId = Math.random().toString(36).substr(2, 9);
 
-      newRecords.push({
-        id: Math.random().toString(36).substr(2, 9),
+      const recordData = {
+        id: recordId,
         collaboratorId: collab.id,
         type: raw.tipo as RequestType,
         startDate: raw.inicio,
@@ -241,14 +250,17 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
         holidaysCount: 0,
         unit: collab.unit,
         state: collab.state,
-        observation: raw.observacao
-      });
+        observation: raw.observacao,
+        usuarioEdicao: user?.name,
+        dataHoraEdicao: new Date().toISOString(),
+        statusEdicao: 'salvo'
+      };
+      batch.set(doc(db, 'records', recordId), recordData);
     });
 
-    setCollaborators(newCollaborators);
-    setRecords(newRecords);
+    await batch.commit();
     
-    saveImportHistory({
+    await saveImportHistory({
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString(),
       userName: user?.name || 'Sistema',

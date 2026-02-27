@@ -73,6 +73,9 @@ export interface VacationRecord {
   unit: string;
   state: string;
   observation?: string; 
+  usuarioEdicao?: string;
+  dataHoraEdicao?: string;
+  statusEdicao?: 'editando' | 'salvo' | 'excluido';
 }
 
 export interface ImportHistory {

@@ -25,6 +25,21 @@ import {
 
 import { Collaborator, VacationRecord, Holiday, User, UserRole, AuditLog, RegisteredUser } from './types';
 import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
+import { db } from './src/lib/firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  query, 
+  orderBy, 
+  limit,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 
 import Dashboard from './pages/Dashboard';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
@@ -68,80 +83,150 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [logo, setLogo] = useState<string>(() => {
-    return localStorage.getItem('app_custom_logo') || DEFAULT_LOGO;
-  });
+  const [logo, setLogo] = useState<string>(DEFAULT_LOGO);
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [records, setRecords] = useState<VacationRecord[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [showSyncToast, setShowSyncToast] = useState(false);
 
-  // Lista de usuários autorizados (Em um app real viria do banco)
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(() => {
-    const saved = localStorage.getItem('app_registered_users');
-    let list = saved ? JSON.parse(saved) : [];
-    // Garantir que o admin raiz sempre exista
-    if (!list.find((u: any) => u.email === ROOT_ADMIN_EMAIL)) {
-      list.push({ 
-        id: 'root-admin',
-        name: 'BIANCA BOMFIM',
-        email: ROOT_ADMIN_EMAIL, 
-        role: UserRole.ADMIN, 
-        addedAt: new Date().toISOString() 
-      });
+  // Sync User to localStorage (Session only)
+  useEffect(() => {
+    if (user) localStorage.setItem('vacation_user', JSON.stringify(user));
+    else localStorage.removeItem('vacation_user');
+  }, [user]);
+
+  // Real-time Sync: Registered Users
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'registered_users'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
+      
+      // Ensure root admin exists in Firestore if not present
+      const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL);
+      if (!hasRoot) {
+        const rootId = 'root-admin';
+        setDoc(doc(db, 'registered_users', rootId), {
+          name: 'BIANCA BOMFIM',
+          email: ROOT_ADMIN_EMAIL,
+          role: UserRole.ADMIN,
+          addedAt: new Date().toISOString()
+        });
+      }
+      setRegisteredUsers(list);
+    });
+    return unsub;
+  }, []);
+
+  // Real-time Sync: Collaborators
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'collaborators'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Collaborator));
+      if (list.length === 0 && isSyncing) {
+        // Seed initial data if empty
+        INITIAL_COLLABORATORS.forEach(c => setDoc(doc(db, 'collaborators', c.id), c));
+      }
+      setCollaborators(list.sort((a, b) => a.name.localeCompare(b.name)));
+      if (!isSyncing) setShowSyncToast(true);
+    });
+    return unsub;
+  }, [isSyncing]);
+
+  // Real-time Sync: Records
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'records'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRecord));
+      if (list.length === 0 && isSyncing) {
+        INITIAL_RECORDS.forEach(r => setDoc(doc(db, 'records', r.id), r));
+      }
+      setRecords(list);
+      if (!isSyncing) setShowSyncToast(true);
+    });
+    return unsub;
+  }, [isSyncing]);
+
+  // Real-time Sync: Holidays
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'holidays'), (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Holiday));
+      if (list.length === 0 && isSyncing) {
+        INITIAL_HOLIDAYS.forEach(h => setDoc(doc(db, 'holidays', h.id), h));
+      }
+      setHolidays(list);
+      if (!isSyncing) setShowSyncToast(true);
+    });
+    return unsub;
+  }, [isSyncing]);
+
+  // Real-time Sync: Logs
+  useEffect(() => {
+    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(100));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuditLog));
+      setLogs(list);
+    });
+    return unsub;
+  }, []);
+
+  // Real-time Sync: Settings (Logo)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'branding'), (docSnap) => {
+      if (docSnap.exists()) {
+        setLogo(docSnap.data().logo || DEFAULT_LOGO);
+      } else {
+        setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO });
+      }
+      setIsSyncing(false);
+    });
+    return unsub;
+  }, []);
+
+  // Auto-hide sync toast
+  useEffect(() => {
+    if (showSyncToast) {
+      const timer = setTimeout(() => setShowSyncToast(false), 3000);
+      return () => clearTimeout(timer);
     }
-    return list;
-  });
+  }, [showSyncToast]);
 
-  useEffect(() => localStorage.setItem('app_registered_users', JSON.stringify(registeredUsers)), [registeredUsers]);
-
-  const [logs, setLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('vacation_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [collaborators, setCollaborators] = useState<Collaborator[]>(() => {
-    const saved = localStorage.getItem('vacation_collaborators');
-    return saved ? JSON.parse(saved) : INITIAL_COLLABORATORS;
-  });
-
-  const [records, setRecords] = useState<VacationRecord[]>(() => {
-    const saved = localStorage.getItem('vacation_records');
-    return saved ? JSON.parse(saved) : INITIAL_RECORDS;
-  });
-
-  const [holidays, setHolidays] = useState<Holiday[]>(() => {
-    const saved = localStorage.getItem('vacation_holidays');
-    return saved ? JSON.parse(saved) : INITIAL_HOLIDAYS;
-  });
-
-  useEffect(() => localStorage.setItem('vacation_user', JSON.stringify(user)), [user]);
-  useEffect(() => localStorage.setItem('vacation_logs', JSON.stringify(logs)), [logs]);
-  useEffect(() => localStorage.setItem('vacation_collaborators', JSON.stringify(collaborators)), [collaborators]);
-  useEffect(() => localStorage.setItem('vacation_records', JSON.stringify(records)), [records]);
-  useEffect(() => localStorage.setItem('vacation_holidays', JSON.stringify(holidays)), [holidays]);
-
-  const updateLogo = (newLogo: string) => {
+  const updateLogo = async (newLogo: string) => {
     if (user?.role !== UserRole.ADMIN) return;
-    setLogo(newLogo);
-    localStorage.setItem('app_custom_logo', newLogo);
+    await setDoc(doc(db, 'settings', 'branding'), { logo: newLogo });
     addLog("Atualizou a identidade visual do sistema");
   };
 
-  const resetLogo = () => {
+  const resetLogo = async () => {
     if (user?.role !== UserRole.ADMIN) return;
-    setLogo(DEFAULT_LOGO);
-    localStorage.removeItem('app_custom_logo');
+    await setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO });
     addLog("Restaurou o branding institucional padrão");
   };
 
-  const addLog = (action: string) => {
+  const addLog = async (action: string) => {
     if (!user) return;
-    const newLog: AuditLog = {
-      id: Math.random().toString(36).substr(2, 9),
+    const newLog = {
       userId: user.id,
       userName: user.name,
       action,
       timestamp: new Date().toISOString()
     };
-    setLogs(prev => [newLog, ...prev].slice(0, 1000)); 
+    await addDoc(collection(db, 'logs'), newLog);
   };
+
+  // Wrapper setters to update Firestore
+  const setCollaboratorsFirestore = async (value: React.SetStateAction<Collaborator[]>) => {
+    if (typeof value === 'function') {
+      const next = value(collaborators);
+      // This is simplified. In a real app, you'd diff or use batch.
+      // For this app, we'll implement specific handlers in pages or use this for bulk.
+      // But since pages use these setters, we need to be careful.
+    }
+  };
+
+  // We'll pass specialized handlers to pages instead of raw setters where possible,
+  // or update the pages to use Firestore directly.
+  // For now, let's keep the setters but they will be "read-only" from Firestore sync,
+  // and we'll provide mutation functions in the context or as props.
 
   const login = async (email: string, password: string) => {
     const lowerEmail = email.toLowerCase().trim();
@@ -206,20 +291,17 @@ const App: React.FC = () => {
                       <Route path="/vacations" element={
                         <VacationsPage 
                           records={records} 
-                          setRecords={setRecords} 
                           collaborators={collaborators} 
                           holidays={holidays} 
                         />
                       } />
-                      <Route path="/holidays" element={<HolidaysPage holidays={holidays} setHolidays={setHolidays} />} />
+                      <Route path="/holidays" element={<HolidaysPage holidays={holidays} />} />
                       <Route path="/report" element={<IndividualReport collaborators={collaborators} records={records} />} />
                       <Route path="/import" element={
                         user.role === UserRole.ADMIN ? (
                           <ImportPage 
                             collaborators={collaborators} 
-                            setCollaborators={setCollaborators} 
                             records={records} 
-                            setRecords={setRecords} 
                           />
                         ) : (
                           <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">
