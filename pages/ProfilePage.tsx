@@ -42,12 +42,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
 
   if (!user) return null;
 
-  const isAdmin = user.email === ROOT_ADMIN_EMAIL;
-  const userLogs = logs.filter(l => l.userId === user.id);
+  const isAdmin = user.role === UserRole.ADMIN;
+  const isRootAdmin = user.email === ROOT_ADMIN_EMAIL;
+  const displayLogs = isAdmin ? logs : logs.filter(l => l.userId === user.id);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && isAdmin) {
+    if (file && isRootAdmin) {
       const reader = new FileReader();
       reader.onloadend = () => {
         updateLogo(reader.result as string);
@@ -274,13 +275,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
               <table className="w-full text-left text-sm border-collapse">
                 <thead className="bg-[#0D1117] text-[#8B949E] font-black uppercase tracking-[0.2em] text-[10px]">
                   <tr>
+                    <th className="px-10 py-5">Usuário</th>
                     <th className="px-10 py-5">Movimentação</th>
                     <th className="px-10 py-5">Carimbo de Data/Hora</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
-                  {userLogs.slice(0, 10).map((log) => (
+                  {displayLogs.slice(0, 20).map((log) => (
                     <tr key={log.id} className="hover:bg-[#1F6FEB]/5 transition-colors">
+                      <td className="px-10 py-6 font-black text-[#1F6FEB] uppercase tracking-tight text-[10px]">{log.userName}</td>
                       <td className="px-10 py-6 font-bold text-white uppercase tracking-tight text-xs">{log.action}</td>
                       <td className="px-10 py-6 text-[#8B949E] text-xs font-bold tabular-nums">
                         <div className="flex items-center gap-3">
@@ -290,9 +293,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                       </td>
                     </tr>
                   ))}
-                  {userLogs.length === 0 && (
+                  {displayLogs.length === 0 && (
                     <tr>
-                      <td colSpan={2} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
+                      <td colSpan={3} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
                     </tr>
                   )}
                 </tbody>
