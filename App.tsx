@@ -50,6 +50,7 @@ import IndividualReport from './pages/IndividualReport';
 import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
 import ImportPage from './pages/ImportPage';
+import AuditLogPage from './pages/AuditLogPage';
 
 // REGRA DE OURO: Administrador Único Fixo
 const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
@@ -312,6 +313,7 @@ const App: React.FC = () => {
                         )
                       } />
                       <Route path="/profile" element={<ProfilePage logs={logs} />} />
+                      <Route path="/audit" element={<AuditLogPage logs={logs} />} />
                     </Routes>
                   </div>
                 </main>
@@ -363,6 +365,7 @@ const Sidebar: React.FC = () => {
     { label: 'Gestão de Férias', icon: Palmtree, path: '/vacations' },
     { label: 'Dossiê Individual', icon: FileText, path: '/report' },
     { label: 'Feriados', icon: Calendar, path: '/holidays' },
+    { label: 'Atividades Recentes', icon: History, path: '/audit', adminOnly: true },
     { label: 'Importar Dados', icon: FileUp, path: '/import', adminOnly: true },
   ].filter(item => !item.adminOnly || user?.role === UserRole.ADMIN);
 

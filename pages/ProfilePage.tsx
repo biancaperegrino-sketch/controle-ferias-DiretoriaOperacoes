@@ -255,56 +255,60 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                 </div>
              </div>
 
-             {!isAdmin && (
+             {user.role !== UserRole.ADMIN && (
                <div className="p-6 bg-[#0D1117] rounded-3xl border border-[#30363D] flex items-start gap-4">
                   <ShieldAlert size={20} className="text-[#1F6FEB] shrink-0" />
                   <p className="text-[10px] text-[#8B949E] font-bold uppercase tracking-widest leading-relaxed">
-                    SEU PERFIL É LIMITADO À <strong>VISUALIZAÇÃO DE DADOS</strong>. PARA ALTERAÇÕES DE SALDO, ENTRE EM CONTATO COM A GESTORA DO SISTEMA.
+                    {user.role === UserRole.USER 
+                      ? "SEU PERFIL PERMITE VISUALIZAÇÃO E LANÇAMENTO DE DADOS. PARA EXCLUSÕES OU EDIÇÕES, ENTRE EM CONTATO COM A GESTORA."
+                      : "SEU PERFIL É LIMITADO À VISUALIZAÇÃO DE DADOS. PARA ALTERAÇÕES DE SALDO, ENTRE EM CONTATO COM A GESTORA DO SISTEMA."}
                   </p>
                </div>
              )}
           </div>
 
-          <div className="bg-[#161B22] rounded-[3rem] border border-[#30363D] shadow-xl overflow-hidden">
-            <div className="px-10 py-8 border-b border-[#30363D] bg-[#0D1117]/50 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 bg-[#30363D] rounded-xl flex items-center justify-center text-[#8B949E]">
-                  <History size={20} />
+          {isAdmin && (
+            <div className="bg-[#161B22] rounded-[3rem] border border-[#30363D] shadow-xl overflow-hidden">
+              <div className="px-10 py-8 border-b border-[#30363D] bg-[#0D1117]/50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 bg-[#30363D] rounded-xl flex items-center justify-center text-[#8B949E]">
+                    <History size={20} />
+                  </div>
+                  <h4 className="font-black text-white uppercase tracking-[0.2em] text-[11px]">Atividades Recentes</h4>
                 </div>
-                <h4 className="font-black text-white uppercase tracking-[0.2em] text-[11px]">Atividades Recentes</h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-[#0D1117] text-[#8B949E] font-black uppercase tracking-[0.2em] text-[10px]">
+                    <tr>
+                      <th className="px-10 py-5">Usuário</th>
+                      <th className="px-10 py-5">Movimentação</th>
+                      <th className="px-10 py-5">Carimbo de Data/Hora</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#30363D]">
+                    {displayLogs.slice(0, 20).map((log) => (
+                      <tr key={log.id} className="hover:bg-[#1F6FEB]/5 transition-colors">
+                        <td className="px-10 py-6 font-black text-[#1F6FEB] uppercase tracking-tight text-[10px]">{log.userName}</td>
+                        <td className="px-10 py-6 font-bold text-white uppercase tracking-tight text-xs">{log.action}</td>
+                        <td className="px-10 py-6 text-[#8B949E] text-xs font-bold tabular-nums">
+                          <div className="flex items-center gap-3">
+                             <Clock size={14} className="text-[#30363D]" />
+                             {new Date(log.timestamp).toLocaleString('pt-BR')}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {displayLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-[#0D1117] text-[#8B949E] font-black uppercase tracking-[0.2em] text-[10px]">
-                  <tr>
-                    <th className="px-10 py-5">Usuário</th>
-                    <th className="px-10 py-5">Movimentação</th>
-                    <th className="px-10 py-5">Carimbo de Data/Hora</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#30363D]">
-                  {displayLogs.slice(0, 20).map((log) => (
-                    <tr key={log.id} className="hover:bg-[#1F6FEB]/5 transition-colors">
-                      <td className="px-10 py-6 font-black text-[#1F6FEB] uppercase tracking-tight text-[10px]">{log.userName}</td>
-                      <td className="px-10 py-6 font-bold text-white uppercase tracking-tight text-xs">{log.action}</td>
-                      <td className="px-10 py-6 text-[#8B949E] text-xs font-bold tabular-nums">
-                        <div className="flex items-center gap-3">
-                           <Clock size={14} className="text-[#30363D]" />
-                           {new Date(log.timestamp).toLocaleString('pt-BR')}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {displayLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

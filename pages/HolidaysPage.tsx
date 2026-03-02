@@ -44,6 +44,9 @@ interface RawHolidayRecord {
 const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
+  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.USER;
+  const canEdit = user?.role === UserRole.ADMIN;
+  const canDelete = user?.role === UserRole.ADMIN;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportMode, setIsImportMode] = useState(false);
@@ -68,8 +71,8 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   });
 
   const handleOpenModal = (holiday?: Holiday) => {
-    if (!isAdmin) return;
     if (holiday) {
+      if (!canEdit) return;
       setEditingHoliday(holiday);
       setFormData({
         name: holiday.name,
@@ -78,6 +81,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         state: holiday.state || ''
       });
     } else {
+      if (!canAdd) return;
       setEditingHoliday(null);
       setFormData({ name: '', date: '', type: HolidayType.NACIONAL, state: '' });
     }
@@ -106,13 +110,13 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!isAdmin) return;
+    if (!canDelete) return;
     setHolidayToDelete({ id, name });
     setIsConfirmOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!holidayToDelete || !isAdmin) return;
+    if (!holidayToDelete || !canDelete) return;
     await deleteDoc(doc(db, 'holidays', holidayToDelete.id));
     addLog(`Excluiu o feriado ${holidayToDelete.name}`);
     setHolidayToDelete(null);
@@ -296,7 +300,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {isAdmin ? (
+          {canAdd ? (
             <>
               <button 
                 onClick={() => setIsImportMode(!isImportMode)}
@@ -431,9 +435,11 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
                   <div className="bg-[#0D1117] p-4 rounded-2xl text-[#8B949E] border border-[#30363D] group-hover:text-[#1F6FEB] group-hover:border-[#1F6FEB]/40 transition-all">
                     <Calendar size={22} />
                   </div>
-                  {isAdmin && (
-                    <div className="flex gap-1">
+                  <div className="flex gap-1">
+                    {canEdit && (
                       <button onClick={() => handleOpenModal(holiday)} className="p-3 text-[#484F58] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all"><Edit2 size={18} /></button>
+                    )}
+                    {canDelete && (
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -444,8 +450,11 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
                       >
                         <Trash2 size={18} />
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {!canEdit && !canDelete && (
+                      <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest mt-3">Consulta</span>
+                    )}
+                  </div>
                 </div>
                 <h4 className="font-black text-white mb-2 leading-tight uppercase tracking-tight text-lg">{holiday.name}</h4>
                 <p className="text-[#8B949E] font-black tabular-nums text-sm mb-6 uppercase tracking-wider">{formatDate(holiday.date)}</p>
@@ -469,7 +478,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         </div>
       )}
 
-      {isAdmin && isModalOpen && (
+      {(canAdd || canEdit) && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#161B22] w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-[#30363D] overflow-hidden">
             <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">

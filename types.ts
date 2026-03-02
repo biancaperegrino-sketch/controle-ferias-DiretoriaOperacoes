@@ -14,6 +14,7 @@ export enum HolidayType {
 
 export enum UserRole {
   ADMIN = 'Administrador',
+  USER = 'Usuário Comum',
   VIEWER = 'Visualizador'
 }
 
