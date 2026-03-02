@@ -25,7 +25,6 @@ import {
 
 import { Collaborator, VacationRecord, Holiday, User, UserRole, AuditLog, RegisteredUser } from './types';
 import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
-import { db } from './src/lib/firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -37,9 +36,15 @@ import {
   query, 
   orderBy, 
   limit,
-  getDocs,
+  getDoc,
   writeBatch
 } from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { auth, db } from './src/lib/firebase';
 
 import Dashboard from './pages/Dashboard';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
@@ -50,7 +55,6 @@ import IndividualReport from './pages/IndividualReport';
 import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
 import ImportPage from './pages/ImportPage';
-import AuditLogPage from './pages/AuditLogPage';
 
 // REGRA DE OURO: Administrador Único Fixo
 const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
@@ -63,6 +67,7 @@ interface AuthContextType {
   logout: () => void;
   addLog: (action: string) => void;
   isAuthenticated: boolean;
+  loading: boolean;
   logo: string;
   updateLogo: (newLogo: string) => void;
   resetLogo: () => void;
@@ -79,11 +84,8 @@ export const useAuth = () => {
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('vacation_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [logo, setLogo] = useState<string>(DEFAULT_LOGO);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -93,11 +95,38 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(true);
   const [showSyncToast, setShowSyncToast] = useState(false);
 
-  // Sync User to localStorage (Session only)
+  // Auth State Listener
   useEffect(() => {
-    if (user) localStorage.setItem('vacation_user', JSON.stringify(user));
-    else localStorage.removeItem('vacation_user');
-  }, [user]);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        // Fetch user role from Firestore
+        const userDoc = await getDoc(doc(db, 'registered_users', firebaseUser.uid));
+        let role = UserRole.VIEWER;
+        let name = firebaseUser.email.split('@')[0].replace('.', ' ').toUpperCase();
+
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          role = data.role;
+          name = data.name;
+        } else if (firebaseUser.email === ROOT_ADMIN_EMAIL) {
+          role = UserRole.ADMIN;
+          name = 'BIANCA BOMFIM';
+        }
+
+        setUser({
+          id: firebaseUser.uid,
+          name: name,
+          email: firebaseUser.email,
+          unit: 'SEDE',
+          role: role
+        });
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
 
   // Real-time Sync: Registered Users
   useEffect(() => {
@@ -230,49 +259,37 @@ const App: React.FC = () => {
   // and we'll provide mutation functions in the context or as props.
 
   const login = async (email: string, password: string) => {
-    const lowerEmail = email.toLowerCase().trim();
-    
-    // Simulação de autorização e autenticação
-    const registered = registeredUsers.find(u => u.email === lowerEmail);
-    const isAuthorized = !!registered || lowerEmail.endsWith('@fgv.br');
-    
-    if (!isAuthorized) {
-      return { success: false, message: "Usuário não autorizado. Entre em contato com o administrador." };
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      addLog(`Acesso realizado`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Login error:", error);
+      let message = "Erro ao realizar login.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        message = "E-mail ou senha incorretos.";
+      }
+      return { success: false, message };
     }
-
-    // Role baseada no registro ou no e-mail fixo
-    let role = UserRole.VIEWER;
-    let name = lowerEmail.split('@')[0].replace('.', ' ').toUpperCase();
-    
-    if (lowerEmail === ROOT_ADMIN_EMAIL) {
-      role = UserRole.ADMIN;
-      name = 'BIANCA BOMFIM';
-    } else if (registered) {
-      role = registered.role;
-      name = registered.name;
-    }
-
-    const loggedUser: User = {
-      id: registered?.id || "usr-" + Math.random().toString(36).substr(2, 6),
-      name: name,
-      email: lowerEmail,
-      unit: 'SEDE', // Default unit for logged user
-      role: role
-    };
-    
-    setUser(loggedUser);
-    addLog(`Acesso realizado (${role})`);
-    return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
     addLog("Logout efetuado");
-    setUser(null);
+    await signOut(auth);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0D1117] flex flex-col items-center justify-center space-y-6">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1F6FEB]"></div>
+        <p className="text-[#8B949E] font-black uppercase tracking-[0.3em] text-[10px]">Carregando Ambiente Seguro...</p>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={{ 
-      user, login, logout, addLog, isAuthenticated: !!user, 
+      user, login, logout, addLog, isAuthenticated: !!user, loading,
       logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers
     }}>
       <HashRouter>
@@ -313,7 +330,6 @@ const App: React.FC = () => {
                         )
                       } />
                       <Route path="/profile" element={<ProfilePage logs={logs} />} />
-                      <Route path="/audit" element={<AuditLogPage logs={logs} />} />
                     </Routes>
                   </div>
                 </main>
@@ -365,7 +381,6 @@ const Sidebar: React.FC = () => {
     { label: 'Gestão de Férias', icon: Palmtree, path: '/vacations' },
     { label: 'Dossiê Individual', icon: FileText, path: '/report' },
     { label: 'Feriados', icon: Calendar, path: '/holidays' },
-    { label: 'Atividades Recentes', icon: History, path: '/audit', adminOnly: true },
     { label: 'Importar Dados', icon: FileUp, path: '/import', adminOnly: true },
   ].filter(item => !item.adminOnly || user?.role === UserRole.ADMIN);
 

@@ -33,9 +33,7 @@ interface VacationsPageProps {
 const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.USER;
-  const canEdit = user?.role === UserRole.ADMIN;
-  const canDelete = user?.role === UserRole.ADMIN;
+  const canCreate = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VacationRecord | null>(null);
@@ -123,7 +121,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
 
   const handleOpenModal = async (record?: VacationRecord) => {
     if (record) {
-      if (!canEdit) return;
+      if (!isAdmin) return; // Only admin can edit
       setEditingRecord(record);
       await acquireLock(record.id);
       const isInitial = record.type === RequestType.SALDO_INICIAL;
@@ -178,6 +176,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       calendarDays: metrics.calendarDays,
       businessDays: metrics.businessDays,
       holidaysCount: metrics.holidaysCount,
+      usuarioCriacao: editingRecord?.usuarioCriacao || user?.name,
+      timestampCriacao: editingRecord?.timestampCriacao || new Date().toISOString(),
       usuarioEdicao: user?.name,
       dataHoraEdicao: new Date().toISOString(),
       statusEdicao: 'salvo'
@@ -197,13 +197,13 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   };
 
   const handleDeleteSingle = (id: string) => {
-    if (!canDelete) return;
+    if (!isAdmin) return;
     setRecordToDelete(id);
     setIsConfirmOpen(true);
   };
 
   const confirmDeleteSingle = async () => {
-    if (!recordToDelete || !canDelete) return;
+    if (!recordToDelete || !isAdmin) return;
     const record = records.find(r => r.id === recordToDelete);
     const collab = collaborators.find(c => c.id === record?.collaboratorId);
     await deleteDoc(doc(db, 'records', recordToDelete));
@@ -218,13 +218,13 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     setRecordToDelete(null);
   };
 
-  const handleBulkDelete = () => {
-    if (!canDelete || selectedIds.size === 0) return;
+  const handleDeleteBulk = () => {
+    if (!isAdmin || selectedIds.size === 0) return;
     setIsBulkConfirmOpen(true);
   };
 
   const confirmDeleteBulk = async () => {
-    if (!canDelete || selectedIds.size === 0) return;
+    if (!isAdmin || selectedIds.size === 0) return;
     const batch = writeBatch(db);
     selectedIds.forEach(id => {
       batch.delete(doc(db, 'records', id));
@@ -269,9 +269,9 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {selectedIds.size > 0 && canDelete && (
+          {selectedIds.size > 0 && isAdmin && (
             <button 
-              onClick={handleBulkDelete}
+              onClick={handleDeleteBulk}
               className="bg-rose-900/20 text-rose-500 border border-rose-500/30 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-rose-500 hover:text-white transition-all active:scale-95"
             >
               <Trash2 size={16} />
@@ -279,7 +279,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
             </button>
           )}
           
-          {canAdd ? (
+          {canCreate ? (
             <button 
               onClick={() => handleOpenModal()}
               className="bg-[#1F6FEB] hover:bg-[#388BFD] text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
@@ -368,14 +368,12 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                         </div>
                       ) : <span className="text-[#30363D]">-</span>}
                     </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex justify-end gap-2">
-                        {canEdit && (
+                    {isAdmin && (
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-2">
                           <button onClick={() => handleOpenModal(record)} className="p-3 text-[#8B949E] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all">
                             <Edit2 size={18} />
                           </button>
-                        )}
-                        {canDelete && (
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -386,12 +384,9 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                           >
                             <Trash2 size={18} />
                           </button>
-                        )}
-                        {!canEdit && !canDelete && (
-                          <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest">Somente Consulta</span>
-                        )}
-                      </div>
-                    </td>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -412,7 +407,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         </div>
       </div>
 
-      {(canAdd || canEdit) && isModalOpen && (
+      {isAdmin && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#161B22] w-full max-w-5xl rounded-[3rem] shadow-2xl border border-[#30363D] overflow-hidden animate-in zoom-in duration-200">
             <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">

@@ -14,7 +14,7 @@ export enum HolidayType {
 
 export enum UserRole {
   ADMIN = 'Administrador',
-  USER = 'Usuário Comum',
+  COMMON = 'Usuário Comum',
   VIEWER = 'Visualizador'
 }
 
@@ -22,6 +22,7 @@ export interface RegisteredUser {
   id: string;
   name: string;
   email: string;
+  password?: string;
   role: UserRole;
   addedAt: string;
 }
@@ -74,6 +75,8 @@ export interface VacationRecord {
   unit: string;
   state: string;
   observation?: string; 
+  usuarioCriacao?: string;
+  timestampCriacao?: string;
   usuarioEdicao?: string;
   dataHoraEdicao?: string;
   statusEdicao?: 'editando' | 'salvo' | 'excluido';

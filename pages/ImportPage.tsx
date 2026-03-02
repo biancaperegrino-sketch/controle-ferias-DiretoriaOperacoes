@@ -12,7 +12,8 @@ import {
   ShieldAlert,
   Loader2,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  Paperclip
 } from 'lucide-react';
 import { useAuth } from '../App';
 
@@ -35,6 +36,7 @@ interface RawRecord {
   dias_corridos: string;
   dias_uteis: string;
   observacao?: string;
+  anexo?: string;
   isValid?: boolean;
   errors?: string[];
 }
@@ -69,8 +71,8 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
   };
 
   const downloadTemplate = () => {
-    const headers = "Unidade;Função;Estado;Nome do colaborador;Data de início;Data de fim;Tipo de Solicitação;Dias Corridos;Dias úteis;Observação";
-    const example = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Agendadas;15;10;Férias coletivas";
+    const headers = "Unidade;Função;Estado;Nome do colaborador;Data de início;Data de fim;Tipo de Solicitação;Dias Corridos;Dias úteis;Observação;Anexo";
+    const example = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Férias agendadas no RH;15;10;Férias coletivas;comprovante.pdf";
     const blob = new Blob([`\uFEFF${headers}\n${example}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -120,8 +122,9 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
       fim: getIndex(['fim', 'final', 'data de fim']),
       tipo: getIndex(['tipo', 'solicitação', 'solicitacao']),
       dias_corridos: getIndex(['corridos']),
-      dias_uteis: getIndex(['úteis', 'uteis']),
-      observacao: getIndex(['observação', 'observacao', 'obs'])
+      dias_uteis: getIndex(['úteis', 'uteis', 'dias', 'valor']),
+      observacao: getIndex(['observação', 'observacao', 'obs']),
+      anexo: getIndex(['anexo', 'documento', 'arquivo', 'doc'])
     };
 
     if (map.nome === -1) {
@@ -141,7 +144,8 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
         tipo: map.tipo !== -1 ? cols[map.tipo] || '' : '',
         dias_corridos: map.dias_corridos !== -1 ? cols[map.dias_corridos] || '0' : '0',
         dias_uteis: map.dias_uteis !== -1 ? cols[map.dias_uteis] || '0' : '0',
-        observacao: map.observacao !== -1 ? cols[map.observacao] || '' : ''
+        observacao: map.observacao !== -1 ? cols[map.observacao] || '' : '',
+        anexo: map.anexo !== -1 ? cols[map.anexo] || '' : ''
       };
     });
 
@@ -172,14 +176,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
   const validateData = () => {
     const validated = rawRecords.map(record => {
       const errors: string[] = [];
-      if (!record.nome) errors.push("Nome é obrigatório");
+      if (!record.nome) errors.push("Nome do colaborador ausente");
       
       const validTypes = Object.values(RequestType) as string[];
       let matchedType = validTypes.find(t => t.toLowerCase() === record.tipo.toLowerCase());
       if (!matchedType && record.tipo) {
-         if (record.tipo.toLowerCase().includes('saldo')) matchedType = RequestType.SALDO_INICIAL;
-         else if (record.tipo.toLowerCase().includes('agend')) matchedType = RequestType.AGENDADAS;
-         else if (record.tipo.toLowerCase().includes('desc')) matchedType = RequestType.DESCONTO;
+         const lowTipo = record.tipo.toLowerCase();
+         if (lowTipo.includes('saldo')) matchedType = RequestType.SALDO_INICIAL;
+         else if (lowTipo.includes('agend')) matchedType = RequestType.AGENDADAS;
+         else if (lowTipo.includes('desc')) matchedType = RequestType.DESCONTO;
+         else if (lowTipo.includes('abono')) matchedType = RequestType.ABONO_PECUNIARIO;
       }
 
       const isInitial = matchedType === RequestType.SALDO_INICIAL;
@@ -187,12 +193,21 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
       const normalizedEnd = normalizeDate(record.fim);
 
       if (!isInitial) {
-        if (!normalizedStart) errors.push(`Início obrigatório`);
-        if (!normalizedEnd) errors.push(`Fim obrigatório`);
+        if (!normalizedStart) errors.push(`Data de início inválida ou ausente`);
+        if (!normalizedEnd) errors.push(`Data de fim inválida ou ausente`);
+        
+        if (normalizedStart && normalizedEnd && normalizedStart > normalizedEnd) {
+          errors.push("Data de início não pode ser posterior ao fim");
+        }
       }
 
       if (!matchedType) {
-        errors.push(`Tipo desconhecido: "${record.tipo}"`);
+        errors.push(`Tipo de evento não reconhecido: "${record.tipo}"`);
+      }
+
+      const days = parseNumber(record.dias_uteis);
+      if (days === 0 && !isInitial) {
+        errors.push("Quantidade de dias não informada ou zero");
       }
 
       return { 
@@ -248,9 +263,12 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
         calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
         businessDays: Math.floor(businessDays),
         holidaysCount: 0,
+        attachmentName: raw.anexo || '',
         unit: collab.unit,
         state: collab.state,
         observation: raw.observacao,
+        usuarioCriacao: user?.name,
+        timestampCriacao: new Date().toISOString(),
         usuarioEdicao: user?.name,
         dataHoraEdicao: new Date().toISOString(),
         statusEdicao: 'salvo'
@@ -356,25 +374,52 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
                     <th className="px-8 py-5">Status</th>
                     <th className="px-8 py-5">Colaborador Identificado</th>
                     <th className="px-8 py-5">Evento</th>
+                    <th className="px-8 py-5">Anexo</th>
+                    <th className="px-8 py-5">Motivo</th>
                     <th className="px-8 py-5 text-right">Valor Líquido</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
                   {rawRecords.map((record, i) => (
-                    <tr key={i} className="hover:bg-[#1F6FEB]/5 transition-colors">
+                    <tr key={i} className={`hover:bg-[#1F6FEB]/5 transition-colors ${!record.isValid ? 'bg-rose-500/5' : ''}`}>
                       <td className="px-8 py-5">{record.isValid ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-rose-500" />}</td>
-                      <td className="px-8 py-5 font-bold text-white uppercase tracking-tight">{record.nome}</td>
+                      <td className="px-8 py-5">
+                        <div className="font-bold text-white uppercase tracking-tight">{record.nome}</div>
+                        {record.unidade && <div className="text-[9px] text-[#8B949E] font-bold uppercase tracking-widest mt-0.5">{record.unidade} • {record.estado}</div>}
+                      </td>
                       <td className="px-8 py-5">
                          <span className="text-[9px] font-black uppercase text-[#8B949E] tracking-widest">{record.tipo}</span>
                       </td>
+                      <td className="px-8 py-5">
+                        {record.anexo ? (
+                          <div className="flex items-center gap-2 text-[#1F6FEB]">
+                            <Paperclip size={12} />
+                            <span className="text-[9px] font-bold uppercase truncate max-w-[100px]">{record.anexo}</span>
+                          </div>
+                        ) : <span className="text-[#30363D]">-</span>}
+                      </td>
+                      <td className="px-8 py-5">
+                        {!record.isValid && record.errors && record.errors.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            {record.errors.map((err, idx) => (
+                              <span key={idx} className="text-[9px] font-black text-rose-500 uppercase tracking-tight flex items-center gap-1">
+                                <AlertTriangle size={10} />
+                                {err}
+                              </span>
+                            ))}
+                          </div>
+                        ) : record.isValid ? (
+                          <span className="text-[9px] font-black text-emerald-500 uppercase tracking-tight">Pronto para importar</span>
+                        ) : null}
+                      </td>
                       <td className="px-8 py-5 font-black text-right text-white tabular-nums">
-                        {record.tipo === RequestType.SALDO_INICIAL ? (record.saldo_inicial || record.dias_uteis) : record.dias_uteis}
+                        {record.tipo === RequestType.SALDO_INICIAL ? (record.dias_uteis) : record.dias_uteis}
                       </td>
                     </tr>
                   ))}
                   {rawRecords.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-8 py-40 text-center">
+                      <td colSpan={6} className="px-8 py-40 text-center">
                         <div className="flex flex-col items-center gap-6 opacity-20">
                            <div className="h-20 w-20 bg-[#0D1117] rounded-3xl border border-[#30363D] flex items-center justify-center">
                               <FileSpreadsheet size={40} className="text-[#8B949E]" />
