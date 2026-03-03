@@ -15,11 +15,14 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
     
-    const result = await login(email, password);
-    if (!result.success) {
-      setError(result.message || "Credenciais inválidas.");
-      setLoading(false);
-    }
+    // Simulação de delay para autenticação
+    setTimeout(async () => {
+      const result = await login(email, password);
+      if (!result.success) {
+        setError(result.message || "Credenciais inválidas.");
+        setLoading(false);
+      }
+    }, 1500);
   };
 
   return (

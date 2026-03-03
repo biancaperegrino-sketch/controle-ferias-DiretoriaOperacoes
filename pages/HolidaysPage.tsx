@@ -25,11 +25,9 @@ import { formatDate } from '../utils/dateUtils';
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
 
-import { db } from '../src/lib/firebase';
-import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
-
 interface HolidaysPageProps {
   holidays: Holiday[];
+  setHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
 }
 
 interface RawHolidayRecord {
@@ -41,12 +39,9 @@ interface RawHolidayRecord {
   errors?: string[];
 }
 
-const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
+const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays, setHolidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.USER;
-  const canEdit = user?.role === UserRole.ADMIN;
-  const canDelete = user?.role === UserRole.ADMIN;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportMode, setIsImportMode] = useState(false);
@@ -71,8 +66,8 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   });
 
   const handleOpenModal = (holiday?: Holiday) => {
+    if (!isAdmin) return;
     if (holiday) {
-      if (!canEdit) return;
       setEditingHoliday(holiday);
       setFormData({
         name: holiday.name,
@@ -81,43 +76,41 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         state: holiday.state || ''
       });
     } else {
-      if (!canAdd) return;
       setEditingHoliday(null);
       setFormData({ name: '', date: '', type: HolidayType.NACIONAL, state: '' });
     }
     setIsModalOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = editingHoliday?.id || Math.random().toString(36).substr(2, 9);
     const finalHoliday: Holiday = {
-      id,
+      id: editingHoliday?.id || Math.random().toString(36).substr(2, 9),
       name: formData.name,
       date: formData.date,
       type: formData.type,
       state: formData.type === HolidayType.ESTADUAL ? formData.state : undefined
     };
 
-    await setDoc(doc(db, 'holidays', id), finalHoliday);
-    
     if (editingHoliday) {
+      setHolidays(prev => prev.map(h => h.id === editingHoliday.id ? finalHoliday : h));
       addLog(`Editou o feriado ${formData.name}`);
     } else {
+      setHolidays(prev => [...prev, finalHoliday]);
       addLog(`Cadastrou o feriado ${formData.name}`);
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!canDelete) return;
+    if (!isAdmin) return;
     setHolidayToDelete({ id, name });
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = async () => {
-    if (!holidayToDelete || !canDelete) return;
-    await deleteDoc(doc(db, 'holidays', holidayToDelete.id));
+  const confirmDelete = () => {
+    if (!holidayToDelete || !isAdmin) return;
+    setHolidays(prev => prev.filter(h => h.id !== holidayToDelete.id));
     addLog(`Excluiu o feriado ${holidayToDelete.name}`);
     setHolidayToDelete(null);
   };
@@ -255,30 +248,34 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    
-    const batch = writeBatch(db);
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    if (replaceExisting) {
-      // Delete all existing holidays first
-      // Note: This is simplified. For large collections, you'd need a more robust way.
-      holidays.forEach(h => {
-        batch.delete(doc(db, 'holidays', h.id));
-      });
-    }
+    let newHolidays = replaceExisting ? [] : [...holidays];
 
     validRows.forEach(raw => {
-      const id = Math.random().toString(36).substr(2, 9);
-      const holidayData = {
-        id,
+      if (!replaceExisting) {
+        const existingIndex = newHolidays.findIndex(h => 
+          h.date === raw.data && 
+          h.type === raw.tipo && 
+          (raw.tipo === HolidayType.NACIONAL || (raw.tipo === HolidayType.ESTADUAL && h.state === raw.estado))
+        );
+        
+        if (existingIndex !== -1) {
+          newHolidays[existingIndex] = { ...newHolidays[existingIndex], name: raw.nome };
+          return;
+        }
+      }
+
+      newHolidays.push({
+        id: Math.random().toString(36).substr(2, 9),
         name: raw.nome,
         date: raw.data,
         type: raw.tipo as HolidayType,
         state: raw.tipo === HolidayType.ESTADUAL ? raw.estado : undefined
-      };
-      batch.set(doc(db, 'holidays', id), holidayData);
+      });
     });
 
-    await batch.commit();
+    setHolidays(newHolidays);
     addLog(`Importou/Atualizou ${validRows.length} feriados via planilha.`);
     
     setIsProcessing(false);
@@ -300,7 +297,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {canAdd ? (
+          {isAdmin ? (
             <>
               <button 
                 onClick={() => setIsImportMode(!isImportMode)}
@@ -435,11 +432,9 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
                   <div className="bg-[#0D1117] p-4 rounded-2xl text-[#8B949E] border border-[#30363D] group-hover:text-[#1F6FEB] group-hover:border-[#1F6FEB]/40 transition-all">
                     <Calendar size={22} />
                   </div>
-                  <div className="flex gap-1">
-                    {canEdit && (
+                  {isAdmin && (
+                    <div className="flex gap-1">
                       <button onClick={() => handleOpenModal(holiday)} className="p-3 text-[#484F58] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all"><Edit2 size={18} /></button>
-                    )}
-                    {canDelete && (
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -450,11 +445,8 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
                       >
                         <Trash2 size={18} />
                       </button>
-                    )}
-                    {!canEdit && !canDelete && (
-                      <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest mt-3">Consulta</span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
                 <h4 className="font-black text-white mb-2 leading-tight uppercase tracking-tight text-lg">{holiday.name}</h4>
                 <p className="text-[#8B949E] font-black tabular-nums text-sm mb-6 uppercase tracking-wider">{formatDate(holiday.date)}</p>
@@ -478,7 +470,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         </div>
       )}
 
-      {(canAdd || canEdit) && isModalOpen && (
+      {isAdmin && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#161B22] w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-[#30363D] overflow-hidden">
             <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">

@@ -12,17 +12,15 @@ import {
   ShieldAlert,
   Loader2,
   Info,
-  AlertTriangle,
-  Paperclip
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../App';
 
-import { db } from '../src/lib/firebase';
-import { collection, doc, setDoc, writeBatch, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-
 interface ImportPageProps {
   collaborators: Collaborator[];
+  setCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
   records: VacationRecord[];
+  setRecords: React.Dispatch<React.SetStateAction<VacationRecord[]>>;
 }
 
 interface RawRecord {
@@ -36,12 +34,11 @@ interface RawRecord {
   dias_corridos: string;
   dias_uteis: string;
   observacao?: string;
-  anexo?: string;
   isValid?: boolean;
   errors?: string[];
 }
 
-const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
+const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators, records, setRecords }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
   
@@ -51,28 +48,22 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [columnMappingError, setColumnMappingError] = useState<string | null>(null);
   
-  const [importHistory, setImportHistory] = useState<ImportHistory[]>([]);
+  const [importHistory, setImportHistory] = useState<ImportHistory[]>(() => {
+    const saved = localStorage.getItem('vacation_import_history');
+    return saved ? JSON.parse(saved) : [];
+  });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync Import History
-  React.useEffect(() => {
-    const q = query(collection(db, 'import_history'), orderBy('date', 'desc'), limit(10));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ImportHistory));
-      setImportHistory(list);
-    });
-    return unsub;
-  }, []);
-
-  const saveImportHistory = async (history: ImportHistory) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    await setDoc(doc(db, 'import_history', id), { ...history, id });
+  const saveImportHistory = (history: ImportHistory) => {
+    const updated = [history, ...importHistory].slice(0, 10);
+    setImportHistory(updated);
+    localStorage.setItem('vacation_import_history', JSON.stringify(updated));
   };
 
   const downloadTemplate = () => {
-    const headers = "Unidade;Função;Estado;Nome do colaborador;Data de início;Data de fim;Tipo de Solicitação;Dias Corridos;Dias úteis;Observação;Anexo";
-    const example = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Férias agendadas no RH;15;10;Férias coletivas;comprovante.pdf";
+    const headers = "Unidade;Função;Estado;Nome do colaborador;Data de início;Data de fim;Tipo de Solicitação;Dias Corridos;Dias úteis;Observação";
+    const example = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Agendadas;15;10;Férias coletivas";
     const blob = new Blob([`\uFEFF${headers}\n${example}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -122,9 +113,8 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
       fim: getIndex(['fim', 'final', 'data de fim']),
       tipo: getIndex(['tipo', 'solicitação', 'solicitacao']),
       dias_corridos: getIndex(['corridos']),
-      dias_uteis: getIndex(['úteis', 'uteis', 'dias', 'valor']),
-      observacao: getIndex(['observação', 'observacao', 'obs']),
-      anexo: getIndex(['anexo', 'documento', 'arquivo', 'doc'])
+      dias_uteis: getIndex(['úteis', 'uteis']),
+      observacao: getIndex(['observação', 'observacao', 'obs'])
     };
 
     if (map.nome === -1) {
@@ -144,8 +134,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
         tipo: map.tipo !== -1 ? cols[map.tipo] || '' : '',
         dias_corridos: map.dias_corridos !== -1 ? cols[map.dias_corridos] || '0' : '0',
         dias_uteis: map.dias_uteis !== -1 ? cols[map.dias_uteis] || '0' : '0',
-        observacao: map.observacao !== -1 ? cols[map.observacao] || '' : '',
-        anexo: map.anexo !== -1 ? cols[map.anexo] || '' : ''
+        observacao: map.observacao !== -1 ? cols[map.observacao] || '' : ''
       };
     });
 
@@ -176,16 +165,14 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
   const validateData = () => {
     const validated = rawRecords.map(record => {
       const errors: string[] = [];
-      if (!record.nome) errors.push("Nome do colaborador ausente");
+      if (!record.nome) errors.push("Nome é obrigatório");
       
       const validTypes = Object.values(RequestType) as string[];
       let matchedType = validTypes.find(t => t.toLowerCase() === record.tipo.toLowerCase());
       if (!matchedType && record.tipo) {
-         const lowTipo = record.tipo.toLowerCase();
-         if (lowTipo.includes('saldo')) matchedType = RequestType.SALDO_INICIAL;
-         else if (lowTipo.includes('agend')) matchedType = RequestType.AGENDADAS;
-         else if (lowTipo.includes('desc')) matchedType = RequestType.DESCONTO;
-         else if (lowTipo.includes('abono')) matchedType = RequestType.ABONO_PECUNIARIO;
+         if (record.tipo.toLowerCase().includes('saldo')) matchedType = RequestType.SALDO_INICIAL;
+         else if (record.tipo.toLowerCase().includes('agend')) matchedType = RequestType.AGENDADAS;
+         else if (record.tipo.toLowerCase().includes('desc')) matchedType = RequestType.DESCONTO;
       }
 
       const isInitial = matchedType === RequestType.SALDO_INICIAL;
@@ -193,21 +180,12 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
       const normalizedEnd = normalizeDate(record.fim);
 
       if (!isInitial) {
-        if (!normalizedStart) errors.push(`Data de início inválida ou ausente`);
-        if (!normalizedEnd) errors.push(`Data de fim inválida ou ausente`);
-        
-        if (normalizedStart && normalizedEnd && normalizedStart > normalizedEnd) {
-          errors.push("Data de início não pode ser posterior ao fim");
-        }
+        if (!normalizedStart) errors.push(`Início obrigatório`);
+        if (!normalizedEnd) errors.push(`Fim obrigatório`);
       }
 
       if (!matchedType) {
-        errors.push(`Tipo de evento não reconhecido: "${record.tipo}"`);
-      }
-
-      const days = parseNumber(record.dias_uteis);
-      if (days === 0 && !isInitial) {
-        errors.push("Quantidade de dias não informada ou zero");
+        errors.push(`Tipo desconhecido: "${record.tipo}"`);
       }
 
       return { 
@@ -231,31 +209,29 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    
-    const batch = writeBatch(db);
-    const tempCollaborators = [...collaborators];
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const newCollaborators = [...collaborators];
+    const newRecords = [...records];
 
     validRows.forEach(raw => {
-      let collab = tempCollaborators.find(c => c.name.toLowerCase() === raw.nome.toLowerCase());
+      let collab = newCollaborators.find(c => c.name.toLowerCase() === raw.nome.toLowerCase());
       if (!collab) {
-        const collabId = Math.random().toString(36).substr(2, 9);
         collab = {
-          id: collabId,
+          id: Math.random().toString(36).substr(2, 9),
           name: raw.nome,
           role: raw.funcao || 'Não informada',
           unit: raw.unidade || 'Não informada',
           state: (raw.estado || 'SP').toUpperCase().substring(0, 2)
         };
-        tempCollaborators.push(collab);
-        batch.set(doc(db, 'collaborators', collabId), collab);
+        newCollaborators.push(collab);
       }
 
       const isInitial = raw.tipo === RequestType.SALDO_INICIAL;
       const businessDays = parseNumber(raw.dias_uteis);
-      const recordId = Math.random().toString(36).substr(2, 9);
 
-      const recordData = {
-        id: recordId,
+      newRecords.push({
+        id: Math.random().toString(36).substr(2, 9),
         collaboratorId: collab.id,
         type: raw.tipo as RequestType,
         startDate: raw.inicio,
@@ -263,22 +239,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
         calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
         businessDays: Math.floor(businessDays),
         holidaysCount: 0,
-        attachmentName: raw.anexo || '',
         unit: collab.unit,
         state: collab.state,
-        observation: raw.observacao,
-        usuarioCriacao: user?.name,
-        timestampCriacao: new Date().toISOString(),
-        usuarioEdicao: user?.name,
-        dataHoraEdicao: new Date().toISOString(),
-        statusEdicao: 'salvo'
-      };
-      batch.set(doc(db, 'records', recordId), recordData);
+        observation: raw.observacao
+      });
     });
 
-    await batch.commit();
+    setCollaborators(newCollaborators);
+    setRecords(newRecords);
     
-    await saveImportHistory({
+    saveImportHistory({
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString(),
       userName: user?.name || 'Sistema',
@@ -374,52 +344,25 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records }) => {
                     <th className="px-8 py-5">Status</th>
                     <th className="px-8 py-5">Colaborador Identificado</th>
                     <th className="px-8 py-5">Evento</th>
-                    <th className="px-8 py-5">Anexo</th>
-                    <th className="px-8 py-5">Motivo</th>
                     <th className="px-8 py-5 text-right">Valor Líquido</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
                   {rawRecords.map((record, i) => (
-                    <tr key={i} className={`hover:bg-[#1F6FEB]/5 transition-colors ${!record.isValid ? 'bg-rose-500/5' : ''}`}>
+                    <tr key={i} className="hover:bg-[#1F6FEB]/5 transition-colors">
                       <td className="px-8 py-5">{record.isValid ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-rose-500" />}</td>
-                      <td className="px-8 py-5">
-                        <div className="font-bold text-white uppercase tracking-tight">{record.nome}</div>
-                        {record.unidade && <div className="text-[9px] text-[#8B949E] font-bold uppercase tracking-widest mt-0.5">{record.unidade} • {record.estado}</div>}
-                      </td>
+                      <td className="px-8 py-5 font-bold text-white uppercase tracking-tight">{record.nome}</td>
                       <td className="px-8 py-5">
                          <span className="text-[9px] font-black uppercase text-[#8B949E] tracking-widest">{record.tipo}</span>
                       </td>
-                      <td className="px-8 py-5">
-                        {record.anexo ? (
-                          <div className="flex items-center gap-2 text-[#1F6FEB]">
-                            <Paperclip size={12} />
-                            <span className="text-[9px] font-bold uppercase truncate max-w-[100px]">{record.anexo}</span>
-                          </div>
-                        ) : <span className="text-[#30363D]">-</span>}
-                      </td>
-                      <td className="px-8 py-5">
-                        {!record.isValid && record.errors && record.errors.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            {record.errors.map((err, idx) => (
-                              <span key={idx} className="text-[9px] font-black text-rose-500 uppercase tracking-tight flex items-center gap-1">
-                                <AlertTriangle size={10} />
-                                {err}
-                              </span>
-                            ))}
-                          </div>
-                        ) : record.isValid ? (
-                          <span className="text-[9px] font-black text-emerald-500 uppercase tracking-tight">Pronto para importar</span>
-                        ) : null}
-                      </td>
                       <td className="px-8 py-5 font-black text-right text-white tabular-nums">
-                        {record.tipo === RequestType.SALDO_INICIAL ? (record.dias_uteis) : record.dias_uteis}
+                        {record.tipo === RequestType.SALDO_INICIAL ? (record.saldo_inicial || record.dias_uteis) : record.dias_uteis}
                       </td>
                     </tr>
                   ))}
                   {rawRecords.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-8 py-40 text-center">
+                      <td colSpan={4} className="px-8 py-40 text-center">
                         <div className="flex flex-col items-center gap-6 opacity-20">
                            <div className="h-20 w-20 bg-[#0D1117] rounded-3xl border border-[#30363D] flex items-center justify-center">
                               <FileSpreadsheet size={40} className="text-[#8B949E]" />

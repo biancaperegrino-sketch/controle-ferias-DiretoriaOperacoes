@@ -21,19 +21,16 @@ import {
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
 
-import { db } from '../src/lib/firebase';
-import { doc, setDoc, deleteDoc, updateDoc, onSnapshot, serverTimestamp, deleteField, writeBatch } from 'firebase/firestore';
-
 interface VacationsPageProps {
   records: VacationRecord[];
+  setRecords: React.Dispatch<React.SetStateAction<VacationRecord[]>>;
   collaborators: Collaborator[];
   holidays: Holiday[];
 }
 
-const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, holidays }) => {
+const VacationsPage: React.FC<VacationsPageProps> = ({ records, setRecords, collaborators, holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canCreate = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VacationRecord | null>(null);
@@ -42,40 +39,6 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
-  const [lock, setLock] = useState<{userId: string, userName: string} | null>(null);
-
-  // Listen for locks
-  useEffect(() => {
-    if (editingRecord && isModalOpen) {
-      const unsub = onSnapshot(doc(db, 'locks', editingRecord.id), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.userId !== user?.id) {
-            setLock({ userId: data.userId, userName: data.userName });
-          } else {
-            setLock(null);
-          }
-        } else {
-          setLock(null);
-        }
-      });
-      return unsub;
-    }
-  }, [editingRecord, isModalOpen, user?.id]);
-
-  // Acquire/Release lock
-  const acquireLock = async (recordId: string) => {
-    if (!user) return;
-    await setDoc(doc(db, 'locks', recordId), {
-      userId: user.id,
-      userName: user.name,
-      timestamp: serverTimestamp()
-    });
-  };
-
-  const releaseLock = async (recordId: string) => {
-    await deleteDoc(doc(db, 'locks', recordId));
-  };
 
   // Fix: Added 'observation' to the initial state of formData to prevent type errors when accessing it in the form.
   const [formData, setFormData] = useState({
@@ -119,11 +82,10 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     }
   }, [formData.startDate, formData.endDate, formData.state, formData.manualDays, formData.type, holidays]);
 
-  const handleOpenModal = async (record?: VacationRecord) => {
+  const handleOpenModal = (record?: VacationRecord) => {
+    if (!isAdmin) return;
     if (record) {
-      if (!isAdmin) return; // Only admin can edit
       setEditingRecord(record);
-      await acquireLock(record.id);
       const isInitial = record.type === RequestType.SALDO_INICIAL;
       // Fix: Updated setFormData to include the 'observation' field from the record when editing.
       setFormData({
@@ -160,37 +122,28 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     setIsModalOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (lock) return; // Prevent saving if locked by another user
-
     const finalStartDate = isInitialBalance ? (formData.startDate || new Date().toISOString().split('T')[0]) : formData.startDate;
     const finalEndDate = isInitialBalance ? (formData.endDate || finalStartDate) : formData.endDate;
 
-    const id = editingRecord?.id || Math.random().toString(36).substr(2, 9);
     const finalRecord: VacationRecord = {
-      id,
+      id: editingRecord?.id || Math.random().toString(36).substr(2, 9),
       ...formData,
       startDate: finalStartDate,
       endDate: finalEndDate,
       calendarDays: metrics.calendarDays,
       businessDays: metrics.businessDays,
-      holidaysCount: metrics.holidaysCount,
-      usuarioCriacao: editingRecord?.usuarioCriacao || user?.name,
-      timestampCriacao: editingRecord?.timestampCriacao || new Date().toISOString(),
-      usuarioEdicao: user?.name,
-      dataHoraEdicao: new Date().toISOString(),
-      statusEdicao: 'salvo'
+      holidaysCount: metrics.holidaysCount
     };
 
     const collab = collaborators.find(c => c.id === formData.collaboratorId);
 
     if (editingRecord) {
-      await setDoc(doc(db, 'records', editingRecord.id), finalRecord);
-      await releaseLock(editingRecord.id);
+      setRecords(prev => prev.map(r => r.id === editingRecord.id ? finalRecord : r));
       addLog(`Alterou registro (${formData.type}) para ${collab?.name}`);
     } else {
-      await setDoc(doc(db, 'records', id), finalRecord);
+      setRecords(prev => [...prev, finalRecord]);
       addLog(`Lançou registro (${formData.type}) para ${collab?.name}`);
     }
     setIsModalOpen(false);
@@ -202,11 +155,11 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     setIsConfirmOpen(true);
   };
 
-  const confirmDeleteSingle = async () => {
+  const confirmDeleteSingle = () => {
     if (!recordToDelete || !isAdmin) return;
     const record = records.find(r => r.id === recordToDelete);
     const collab = collaborators.find(c => c.id === record?.collaboratorId);
-    await deleteDoc(doc(db, 'records', recordToDelete));
+    setRecords(prev => prev.filter(r => r.id !== recordToDelete));
     setSelectedIds(prev => {
       const next = new Set(prev);
       next.delete(recordToDelete);
@@ -223,13 +176,9 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     setIsBulkConfirmOpen(true);
   };
 
-  const confirmDeleteBulk = async () => {
+  const confirmDeleteBulk = () => {
     if (!isAdmin || selectedIds.size === 0) return;
-    const batch = writeBatch(db);
-    selectedIds.forEach(id => {
-      batch.delete(doc(db, 'records', id));
-    });
-    await batch.commit();
+    setRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
     addLog(`Excluiu ${selectedIds.size} registros de férias em massa.`);
     setSelectedIds(new Set());
   };
@@ -279,7 +228,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
             </button>
           )}
           
-          {canCreate ? (
+          {isAdmin ? (
             <button 
               onClick={() => handleOpenModal()}
               className="bg-[#1F6FEB] hover:bg-[#388BFD] text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
@@ -419,25 +368,11 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                   {editingRecord ? 'Atualizar Registro' : 'Lançamento do Zero'}
                 </h3>
               </div>
-              <button onClick={async () => {
-                if (editingRecord) await releaseLock(editingRecord.id);
-                setIsModalOpen(false);
-              }} className="h-10 w-10 bg-[#30363D] hover:bg-[#484F58] rounded-full flex items-center justify-center text-white transition-colors">
+              <button onClick={() => setIsModalOpen(false)} className="h-10 w-10 bg-[#30363D] hover:bg-[#484F58] rounded-full flex items-center justify-center text-white transition-colors">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleSave} className="p-10">
-              {lock && (
-                <div className="mb-8 p-6 bg-rose-500/10 border border-rose-500/30 rounded-[2rem] flex items-center gap-4 animate-in slide-in-from-top-4">
-                  <div className="h-12 w-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/20">
-                    <Lock size={24} />
-                  </div>
-                  <div>
-                    <h4 className="font-black text-rose-500 uppercase tracking-widest text-xs">Registro sendo editado</h4>
-                    <p className="text-[#8B949E] font-bold text-[10px] uppercase tracking-wider mt-1">Este registro está sendo modificado por <strong>{lock.userName}</strong> no momento.</p>
-                  </div>
-                </div>
-              )}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <div className="lg:col-span-7 space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -600,20 +535,17 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                   <div className="flex gap-4">
                     <button 
                       type="button" 
-                      onClick={async () => {
-                        if (editingRecord) await releaseLock(editingRecord.id);
-                        setIsModalOpen(false);
-                      }}
+                      onClick={() => setIsModalOpen(false)}
                       className="flex-1 px-6 py-4 bg-[#0D1117] text-[#8B949E] border border-[#30363D] rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#30363D] hover:text-white transition-all"
                     >
                       Cancelar
                     </button>
                     <button 
                       type="submit" 
-                      disabled={!!lock || !formData.collaboratorId || (!isInitialBalance && metrics.calendarDays === 0) || (isInitialBalance && !formData.manualDays)}
+                      disabled={!formData.collaboratorId || (!isInitialBalance && metrics.calendarDays === 0) || (isInitialBalance && !formData.manualDays)}
                       className="flex-[2] px-10 py-4 bg-[#1F6FEB] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#388BFD] transition-all shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      {lock ? 'Bloqueado para Edição' : 'Salvar Lançamento'}
+                      Salvar Lançamento
                     </button>
                   </div>
                 </div>
