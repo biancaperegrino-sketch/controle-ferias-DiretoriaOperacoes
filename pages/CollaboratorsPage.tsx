@@ -7,14 +7,19 @@ import { Search, UserPlus, X, Edit2, Trash2, ShieldAlert, Users } from 'lucide-r
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
 
+import { db } from '../src/lib/firebase';
+import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
 interface CollaboratorsPageProps {
   collaborators: Collaborator[];
-  setCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
 }
 
-const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, setCollaborators }) => {
+const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
+  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.USER;
+  const canEdit = user?.role === UserRole.ADMIN;
+  const canDelete = user?.role === UserRole.ADMIN;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCollaborator, setEditingCollaborator] = useState<Collaborator | null>(null);
@@ -31,8 +36,8 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
   });
 
   const handleOpenModal = (collab?: Collaborator) => {
-    if (!isAdmin) return;
     if (collab) {
+      if (!canEdit) return;
       setEditingCollaborator(collab);
       setFormData({
         name: collab.name,
@@ -41,39 +46,38 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
         state: collab.state
       });
     } else {
+      if (!canAdd) return;
       setEditingCollaborator(null);
       setFormData({ name: '', role: '', unit: '', state: 'SP' });
     }
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingCollaborator) {
-      setCollaborators(prev => prev.map(c => 
-        c.id === editingCollaborator.id ? { ...c, ...formData } : c
-      ));
+      await updateDoc(doc(db, 'collaborators', editingCollaborator.id), formData);
       addLog(`Editou o colaborador ${formData.name}`);
     } else {
-      const newCollaborator: Collaborator = {
-        id: Math.random().toString(36).substr(2, 9),
+      const id = Math.random().toString(36).substr(2, 9);
+      await setDoc(doc(db, 'collaborators', id), {
+        id,
         ...formData
-      };
-      setCollaborators(prev => [...prev, newCollaborator]);
+      });
       addLog(`Cadastrou o colaborador ${formData.name}`);
     }
     setIsModalOpen(false);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!isAdmin) return;
+    if (!canDelete) return;
     setCollabToDelete({ id, name });
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (!collabToDelete || !isAdmin) return;
-    setCollaborators(prev => prev.filter(c => c.id !== collabToDelete.id));
+  const confirmDelete = async () => {
+    if (!collabToDelete || !canDelete) return;
+    await deleteDoc(doc(db, 'collaborators', collabToDelete.id));
     addLog(`Excluiu o colaborador ${collabToDelete.name}`);
     setCollabToDelete(null);
   };
@@ -89,7 +93,7 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
           <h2 className="text-3xl font-black text-white tracking-tight uppercase">Base de Colaboradores</h2>
           <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Gestão do Quadro de Operações</p>
         </div>
-        {isAdmin ? (
+        {canAdd ? (
           <button 
             onClick={() => handleOpenModal()}
             className="bg-[#1F6FEB] hover:bg-[#388BFD] text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
@@ -127,7 +131,7 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
                 <th className="px-8 py-5">Cargo / Função</th>
                 <th className="px-8 py-5">Unidade</th>
                 <th className="px-8 py-5">UF</th>
-                {isAdmin && <th className="px-8 py-5 text-right">Ações de Gestão</th>}
+                <th className="px-8 py-5 text-right">Ações de Gestão</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363D]">
@@ -139,12 +143,14 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
                   <td className="px-8 py-6">
                     <span className="bg-[#0D1117] text-[#8B949E] px-2.5 py-1 rounded text-[10px] font-black uppercase border border-[#30363D] group-hover:border-[#1F6FEB] transition-colors">{collab.state}</span>
                   </td>
-                  {isAdmin && (
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex justify-end gap-2">
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-2">
+                      {canEdit && (
                         <button onClick={() => handleOpenModal(collab)} className="p-3 text-[#8B949E] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all">
                           <Edit2 size={18} />
                         </button>
+                      )}
+                      {canDelete && (
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -155,9 +161,12 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators, se
                         >
                           <Trash2 size={18} />
                         </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
+                      {!canEdit && !canDelete && (
+                        <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest">Somente Consulta</span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (

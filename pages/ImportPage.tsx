@@ -56,15 +56,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const saveImportHistory = (history: ImportHistory) => {
-    const updated = [history, ...importHistory].slice(0, 10);
+    const updated = [history, ...importHistory].slice(0, 50);
     setImportHistory(updated);
     localStorage.setItem('vacation_import_history', JSON.stringify(updated));
   };
 
   const downloadTemplate = () => {
     const headers = "Unidade;Função;Estado;Nome do colaborador;Data de início;Data de fim;Tipo de Solicitação;Dias Corridos;Dias úteis;Observação";
-    const example = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Agendadas;15;10;Férias coletivas";
-    const blob = new Blob([`\uFEFF${headers}\n${example}`], { type: 'text/csv;charset=utf-8;' });
+    const example1 = "Sede;Analista;SP;João Silva;01/01/2024;15/01/2024;Férias agendadas no RH;15;10;Férias coletivas";
+    const example2 = "Sede;Analista;SP;Maria Souza;;;Saldo Inicial;0;30;Saldo vindo do sistema antigo";
+    const blob = new Blob([`\uFEFF${headers}\n${example1}\n${example2}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "modelo_importacao_fgv.csv";
@@ -105,16 +106,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
     };
 
     const map = {
-      unidade: getIndex(['unidade', 'local']),
-      funcao: getIndex(['função', 'funcao', 'cargo']),
-      estado: getIndex(['estado', 'uf']),
-      nome: getIndex(['nome', 'colaborador', 'funcionario']),
-      inicio: getIndex(['início', 'inicio', 'data de início']),
-      fim: getIndex(['fim', 'final', 'data de fim']),
-      tipo: getIndex(['tipo', 'solicitação', 'solicitacao']),
-      dias_corridos: getIndex(['corridos']),
-      dias_uteis: getIndex(['úteis', 'uteis']),
-      observacao: getIndex(['observação', 'observacao', 'obs'])
+      unidade: getIndex(['unidade', 'local', 'centro']),
+      funcao: getIndex(['função', 'funcao', 'cargo', 'ocupação']),
+      estado: getIndex(['estado', 'uf', 'região']),
+      nome: getIndex(['nome', 'colaborador', 'funcionario', 'pessoal']),
+      inicio: getIndex(['início', 'inicio', 'data de início', 'data inicial', 'periodo inicio']),
+      fim: getIndex(['fim', 'final', 'data de fim', 'data final', 'periodo fim']),
+      tipo: getIndex(['tipo', 'solicitação', 'solicitacao', 'evento', 'descrição']),
+      dias_corridos: getIndex(['corridos', 'total dias']),
+      dias_uteis: getIndex(['úteis', 'uteis', 'dias', 'líquido', 'liquido']),
+      observacao: getIndex(['observação', 'observacao', 'obs', 'comentário'])
     };
 
     if (map.nome === -1) {
@@ -144,12 +145,19 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
   const normalizeDate = (dateStr: string) => {
     if (!dateStr) return null;
     const clean = dateStr.trim();
+    
+    // ISO format YYYY-MM-DD
     if (clean.match(/^\d{4}-\d{2}-\d{2}$/)) return clean;
-    const brMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    
+    // BR format DD/MM/YYYY or D/M/YY
+    const brMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
     if (brMatch) {
       const d = brMatch[1].padStart(2, '0');
       const m = brMatch[2].padStart(2, '0');
-      const y = brMatch[3];
+      let y = brMatch[3];
+      if (y.length === 2) {
+        y = parseInt(y) > 50 ? `19${y}` : `20${y}`;
+      }
       return `${y}-${m}-${d}`;
     }
     return null;
@@ -168,21 +176,32 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
       if (!record.nome) errors.push("Nome é obrigatório");
       
       const validTypes = Object.values(RequestType) as string[];
-      let matchedType = validTypes.find(t => t.toLowerCase() === record.tipo.toLowerCase());
+      const typeLower = record.tipo.toLowerCase();
+      let matchedType = validTypes.find(t => t.toLowerCase() === typeLower);
+      
       if (!matchedType && record.tipo) {
-         if (record.tipo.toLowerCase().includes('saldo')) matchedType = RequestType.SALDO_INICIAL;
-         else if (record.tipo.toLowerCase().includes('agend')) matchedType = RequestType.AGENDADAS;
-         else if (record.tipo.toLowerCase().includes('desc')) matchedType = RequestType.DESCONTO;
+         if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
+         else if (typeLower.includes('agend') || typeLower.includes('rh') || typeLower.includes('marcado')) matchedType = RequestType.AGENDADAS;
+         else if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
+         else if (typeLower.includes('abono') || typeLower.includes('pecun')) matchedType = RequestType.ABONO_PECUNIARIO;
       }
 
       const isInitial = matchedType === RequestType.SALDO_INICIAL;
+      const isDesconto = matchedType === RequestType.DESCONTO;
+      const isAgendada = matchedType === RequestType.AGENDADAS;
       const normalizedStart = normalizeDate(record.inicio);
       const normalizedEnd = normalizeDate(record.fim);
 
+      // Apenas Saldo Inicial não exige datas. 
+      // Descontos e Férias Agendadas exigem datas para rastreabilidade.
       if (!isInitial) {
         if (!normalizedStart) errors.push(`Início obrigatório`);
         if (!normalizedEnd) errors.push(`Fim obrigatório`);
       }
+
+      // Se não tiver data, usamos a data atual como referência para não travar a importação
+      const finalStart = normalizedStart || new Date().toISOString().split('T')[0];
+      const finalEnd = normalizedEnd || finalStart;
 
       if (!matchedType) {
         errors.push(`Tipo desconhecido: "${record.tipo}"`);
@@ -192,8 +211,8 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
         ...record, 
         isValid: errors.length === 0, 
         errors,
-        inicio: normalizedStart || (isInitial ? new Date().toISOString().split('T')[0] : record.inicio),
-        fim: normalizedEnd || (isInitial ? (normalizedStart || new Date().toISOString().split('T')[0]) : record.fim),
+        inicio: finalStart,
+        fim: finalEnd,
         tipo: matchedType || record.tipo
       };
     });
@@ -269,7 +288,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black text-white tracking-tight uppercase">Módulo de Importação</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Migração Massiva de Registros Históricos</p>
+          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Migração Massiva de Registros Históricos (Suporte até 1000+ linhas)</p>
         </div>
         {!isAdmin && (
           <div className="bg-amber-950/20 text-amber-500 px-6 py-3 rounded-2xl border border-amber-500/30 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-3">
@@ -298,6 +317,15 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
                   <Download size={20} />
                 </div>
                 <h3 className="font-black text-white uppercase tracking-widest text-[11px]">1. Obter Modelo Fiscal</h3>
+              </div>
+              <div className="bg-blue-950/20 border border-blue-500/20 p-4 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-[#1F6FEB]">
+                  <Info size={14} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Dica de Preenchimento</span>
+                </div>
+                <p className="text-[9px] text-[#8B949E] font-bold leading-relaxed uppercase">
+                  Para <strong className="text-white">Saldo Inicial</strong>, as datas são <span className="text-emerald-500">opcionais</span>. Para <strong className="text-white">Descontos</strong> e <strong className="text-white">Férias</strong>, as datas são <span className="text-rose-500">obrigatórias</span>.
+                </p>
               </div>
               <button onClick={downloadTemplate} className="w-full flex items-center justify-center gap-3 px-6 py-5 bg-[#0D1117] border border-[#30363D] hover:border-[#1F6FEB] hover:bg-[#1F6FEB]/5 rounded-2xl transition-all font-black text-[#8B949E] hover:text-white text-[10px] uppercase tracking-[0.2em]">
                 <FileSpreadsheet size={18} />
@@ -335,7 +363,12 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
           <div className="bg-[#161B22] rounded-[2.5rem] border border-[#30363D] shadow-xl overflow-hidden h-full flex flex-col">
             <div className="px-10 py-6 border-b border-[#30363D] bg-[#0D1117]/50 flex justify-between items-center">
               <h4 className="font-black text-white uppercase tracking-[0.2em] text-[10px]">Diagnóstico de Pré-Importação</h4>
-              {isValidated && <span className="text-[10px] font-black uppercase text-emerald-500 tabular-nums">{rawRecords.filter(r => r.isValid).length} REGISTROS VÁLIDOS</span>}
+              {rawRecords.length > 0 && (
+                <div className="flex gap-4">
+                  <span className="text-[10px] font-black uppercase text-[#8B949E] tabular-nums">{rawRecords.length} REGISTROS TOTAIS</span>
+                  {isValidated && <span className="text-[10px] font-black uppercase text-emerald-500 tabular-nums">{rawRecords.filter(r => r.isValid).length} REGISTROS VÁLIDOS</span>}
+                </div>
+              )}
             </div>
             <div className="flex-1 overflow-auto max-h-[600px]">
               <table className="w-full text-left text-xs border-collapse">
@@ -348,18 +381,34 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
-                  {rawRecords.map((record, i) => (
+                  {rawRecords.slice(0, 100).map((record, i) => (
                     <tr key={i} className="hover:bg-[#1F6FEB]/5 transition-colors">
                       <td className="px-8 py-5">{record.isValid ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-rose-500" />}</td>
-                      <td className="px-8 py-5 font-bold text-white uppercase tracking-tight">{record.nome}</td>
+                      <td className="px-8 py-5 font-bold text-white uppercase tracking-tight">
+                        {record.nome}
+                        {!record.isValid && record.errors && (
+                          <div className="text-[9px] text-rose-500 font-black mt-1 lowercase tracking-normal">
+                            {record.errors.join(' • ')}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-8 py-5">
                          <span className="text-[9px] font-black uppercase text-[#8B949E] tracking-widest">{record.tipo}</span>
                       </td>
                       <td className="px-8 py-5 font-black text-right text-white tabular-nums">
-                        {record.tipo === RequestType.SALDO_INICIAL ? (record.saldo_inicial || record.dias_uteis) : record.dias_uteis}
+                        {record.dias_uteis}
                       </td>
                     </tr>
                   ))}
+                  {rawRecords.length > 100 && (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-4 text-center bg-[#0D1117]/30">
+                        <p className="text-[10px] font-black text-[#8B949E] uppercase tracking-widest">
+                          Exibindo apenas os primeiros 100 registros de {rawRecords.length}. Todos os registros serão processados na migração.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
                   {rawRecords.length === 0 && (
                     <tr>
                       <td colSpan={4} className="px-8 py-40 text-center">

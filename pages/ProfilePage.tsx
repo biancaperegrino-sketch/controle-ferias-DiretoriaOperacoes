@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { AuditLog, UserRole, RegisteredUser } from '../types';
 
+import { db } from '../src/lib/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+
 interface ProfilePageProps {
   logs: AuditLog[];
 }
@@ -29,7 +32,7 @@ interface ProfilePageProps {
 const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
-  const { user, logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers, addLog } = useAuth();
+  const { user, logo, updateLogo, resetLogo, registeredUsers, addLog } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -76,35 +79,35 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
     setIsUserModalOpen(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const email = userFormData.email.toLowerCase().trim();
+    const id = editingUser?.id || Math.random().toString(36).substr(2, 9);
     
+    const userData: RegisteredUser = {
+      id,
+      ...userFormData,
+      email,
+      addedAt: editingUser?.addedAt || new Date().toISOString()
+    };
+
+    await setDoc(doc(db, 'registered_users', id), userData);
+
     if (editingUser) {
-      setRegisteredUsers(prev => prev.map(u => 
-        u.id === editingUser.id ? { ...u, ...userFormData, email } : u
-      ));
       addLog(`Editou acesso do usuário ${userFormData.name}`);
     } else {
-      const newUser: RegisteredUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...userFormData,
-        email,
-        addedAt: new Date().toISOString()
-      };
-      setRegisteredUsers(prev => [...prev, newUser]);
       addLog(`Cadastrou novo acesso para ${userFormData.name}`);
     }
     setIsUserModalOpen(false);
   };
 
-  const handleDeleteUser = (id: string, name: string, email: string) => {
+  const handleDeleteUser = async (id: string, name: string, email: string) => {
     if (email === ROOT_ADMIN_EMAIL) {
       alert("O administrador raiz não pode ser removido.");
       return;
     }
     if (confirm(`Deseja realmente remover o acesso de ${name}?`)) {
-      setRegisteredUsers(prev => prev.filter(u => u.id !== id));
+      await deleteDoc(doc(db, 'registered_users', id));
       addLog(`Removeu acesso do usuário ${name}`);
     }
   };
@@ -252,56 +255,60 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                 </div>
              </div>
 
-             {!isAdmin && (
+             {user.role !== UserRole.ADMIN && (
                <div className="p-6 bg-[#0D1117] rounded-3xl border border-[#30363D] flex items-start gap-4">
                   <ShieldAlert size={20} className="text-[#1F6FEB] shrink-0" />
                   <p className="text-[10px] text-[#8B949E] font-bold uppercase tracking-widest leading-relaxed">
-                    SEU PERFIL É LIMITADO À <strong>VISUALIZAÇÃO DE DADOS</strong>. PARA ALTERAÇÕES DE SALDO, ENTRE EM CONTATO COM A GESTORA DO SISTEMA.
+                    {user.role === UserRole.USER 
+                      ? "SEU PERFIL PERMITE VISUALIZAÇÃO E LANÇAMENTO DE DADOS. PARA EXCLUSÕES OU EDIÇÕES, ENTRE EM CONTATO COM A GESTORA."
+                      : "SEU PERFIL É LIMITADO À VISUALIZAÇÃO DE DADOS. PARA ALTERAÇÕES DE SALDO, ENTRE EM CONTATO COM A GESTORA DO SISTEMA."}
                   </p>
                </div>
              )}
           </div>
 
-          <div className="bg-[#161B22] rounded-[3rem] border border-[#30363D] shadow-xl overflow-hidden">
-            <div className="px-10 py-8 border-b border-[#30363D] bg-[#0D1117]/50 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 bg-[#30363D] rounded-xl flex items-center justify-center text-[#8B949E]">
-                  <History size={20} />
+          {isAdmin && (
+            <div className="bg-[#161B22] rounded-[3rem] border border-[#30363D] shadow-xl overflow-hidden">
+              <div className="px-10 py-8 border-b border-[#30363D] bg-[#0D1117]/50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 bg-[#30363D] rounded-xl flex items-center justify-center text-[#8B949E]">
+                    <History size={20} />
+                  </div>
+                  <h4 className="font-black text-white uppercase tracking-[0.2em] text-[11px]">Atividades Recentes</h4>
                 </div>
-                <h4 className="font-black text-white uppercase tracking-[0.2em] text-[11px]">Atividades Recentes</h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-[#0D1117] text-[#8B949E] font-black uppercase tracking-[0.2em] text-[10px]">
+                    <tr>
+                      <th className="px-10 py-5">Usuário</th>
+                      <th className="px-10 py-5">Movimentação</th>
+                      <th className="px-10 py-5">Carimbo de Data/Hora</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#30363D]">
+                    {displayLogs.slice(0, 20).map((log) => (
+                      <tr key={log.id} className="hover:bg-[#1F6FEB]/5 transition-colors">
+                        <td className="px-10 py-6 font-black text-[#1F6FEB] uppercase tracking-tight text-[10px]">{log.userName}</td>
+                        <td className="px-10 py-6 font-bold text-white uppercase tracking-tight text-xs">{log.action}</td>
+                        <td className="px-10 py-6 text-[#8B949E] text-xs font-bold tabular-nums">
+                          <div className="flex items-center gap-3">
+                             <Clock size={14} className="text-[#30363D]" />
+                             {new Date(log.timestamp).toLocaleString('pt-BR')}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {displayLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead className="bg-[#0D1117] text-[#8B949E] font-black uppercase tracking-[0.2em] text-[10px]">
-                  <tr>
-                    <th className="px-10 py-5">Usuário</th>
-                    <th className="px-10 py-5">Movimentação</th>
-                    <th className="px-10 py-5">Carimbo de Data/Hora</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#30363D]">
-                  {displayLogs.slice(0, 20).map((log) => (
-                    <tr key={log.id} className="hover:bg-[#1F6FEB]/5 transition-colors">
-                      <td className="px-10 py-6 font-black text-[#1F6FEB] uppercase tracking-tight text-[10px]">{log.userName}</td>
-                      <td className="px-10 py-6 font-bold text-white uppercase tracking-tight text-xs">{log.action}</td>
-                      <td className="px-10 py-6 text-[#8B949E] text-xs font-bold tabular-nums">
-                        <div className="flex items-center gap-3">
-                           <Clock size={14} className="text-[#30363D]" />
-                           {new Date(log.timestamp).toLocaleString('pt-BR')}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {displayLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-10 py-12 text-center text-[#484F58] font-black uppercase text-[10px] tracking-widest">Nenhuma atividade registrada</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
