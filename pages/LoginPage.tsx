@@ -1,13 +1,11 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../App';
-import { Loader2, Mail, Lock, ShieldX, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Loader2, ShieldX, ShieldAlert, ArrowRight } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const { login, logo } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -15,9 +13,9 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
     
-    const result = await login(email, password);
+    const result = await login();
     if (!result.success) {
-      setError(result.message || "Credenciais inválidas.");
+      setError(result.message || "Erro ao realizar login com Google.");
       setLoading(false);
     }
   };
@@ -41,32 +39,8 @@ const LoginPage: React.FC = () => {
             </div>
 
             {!loading ? (
-              <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-6">
                 <div className="space-y-4">
-                  <div className="relative">
-                    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58]" size={18} />
-                    <input 
-                      type="email" 
-                      required
-                      placeholder="e-mail corporativo"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-14 pr-6 py-4 bg-[#0D1117] border border-[#30363D] focus:border-[#1F6FEB] rounded-2xl outline-none font-bold text-white placeholder:text-[#484F58] transition-all text-sm"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58]" size={18} />
-                    <input 
-                      type="password" 
-                      required
-                      placeholder="senha de acesso"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-14 pr-6 py-4 bg-[#0D1117] border border-[#30363D] focus:border-[#1F6FEB] rounded-2xl outline-none font-bold text-white placeholder:text-[#484F58] transition-all text-sm"
-                    />
-                  </div>
-
                   {error && (
                     <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                       <ShieldX className="text-rose-500 shrink-0" size={18} />
@@ -75,11 +49,12 @@ const LoginPage: React.FC = () => {
                   )}
 
                   <button 
-                    type="submit" 
-                    className="w-full flex items-center justify-center gap-4 bg-[#1F6FEB] hover:bg-[#388BFD] text-white px-6 py-4 rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 group"
+                    onClick={handleLogin}
+                    className="w-full flex items-center justify-center gap-4 bg-white hover:bg-gray-50 text-gray-900 px-6 py-4 rounded-2xl transition-all shadow-lg active:scale-95 group border border-gray-200"
                   >
-                    <span className="text-[10px] font-black uppercase tracking-widest">Acessar Sistema</span>
-                    <ArrowRight size={16} />
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Google</span>
+                    <ArrowRight size={16} className="text-gray-400 group-hover:text-gray-900 transition-colors" />
                   </button>
                 </div>
 
@@ -89,7 +64,7 @@ const LoginPage: React.FC = () => {
                       <span className="text-[8px] font-black uppercase text-white tracking-[0.3em]">Ambiente Seguro Corporativo</span>
                    </div>
                 </div>
-              </form>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 space-y-6 animate-pulse">
                 <Loader2 className="animate-spin text-[#1F6FEB]" size={48} strokeWidth={4} />

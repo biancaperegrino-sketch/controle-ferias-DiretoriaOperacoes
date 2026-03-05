@@ -1,0 +1,130 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: collaborators
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - role: string (required)
+//   - unit: string (required)
+//   - state: string (required)
+//
+// Collection: records
+// Fields:
+//   - id: string (required)
+//   - collaboratorId: string (required)
+//   - type: string (required)
+//   - startDate: string (required)
+//   - endDate: string (required)
+//   - calendarDays: number
+//   - businessDays: number
+//   - holidaysCount: number
+//   - unit: string (required)
+//   - state: string (required)
+//   - observation: string
+//   - usuarioCriacao: string
+//   - timestampCriacao: string
+//
+// Collection: holidays
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - date: string (required)
+//   - type: string (required)
+//   - state: string
+//   - unit: string
+//
+// Collection: logs
+// Fields:
+//   - id: string (required)
+//   - userId: string (required)
+//   - userName: string (required)
+//   - action: string (required)
+//   - timestamp: string (required)
+//
+// Collection: registered_users
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - email: string (required)
+//   - role: string (required)
+//   - addedAt: string (required)
+//
+// Collection: settings
+// Document: branding
+// Fields:
+//   - logo: string
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/registered_users/$(request.auth.uid)).data.role == 'Administrador' ||
+        (request.auth.token.email == "biancaperegrino@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isEditor() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        get(/databases/$(database)/documents/registered_users/$(request.auth.uid)).data.role == 'Usuário Comum'
+      );
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, maxLen) {
+      return request.resource.data[field] is string && request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /registered_users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /collaborators/{collabId} {
+      allow read: if isAuthenticated();
+      allow write: if isEditor();
+    }
+
+    match /records/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isEditor();
+    }
+
+    match /holidays/{holidayId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/branding {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

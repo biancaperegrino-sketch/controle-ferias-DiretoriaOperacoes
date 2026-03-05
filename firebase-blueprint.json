@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Collaborator": {
+      "title": "Collaborator",
+      "description": "A collaborator in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "unit": { "type": "string" },
+        "state": { "type": "string" }
+      },
+      "required": ["id", "name", "role", "unit", "state"]
+    },
+    "VacationRecord": {
+      "title": "VacationRecord",
+      "description": "A record of vacation or balance adjustment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "collaboratorId": { "type": "string" },
+        "type": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "calendarDays": { "type": "number" },
+        "businessDays": { "type": "number" },
+        "holidaysCount": { "type": "number" },
+        "unit": { "type": "string" },
+        "state": { "type": "string" },
+        "observation": { "type": "string" },
+        "usuarioCriacao": { "type": "string" },
+        "timestampCriacao": { "type": "string" }
+      },
+      "required": ["id", "collaboratorId", "type", "startDate", "endDate", "unit", "state"]
+    },
+    "Holiday": {
+      "title": "Holiday",
+      "description": "A holiday record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string" },
+        "state": { "type": "string" },
+        "unit": { "type": "string" }
+      },
+      "required": ["id", "name", "date", "type"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "A log of user actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "action", "timestamp"]
+    },
+    "RegisteredUser": {
+      "title": "RegisteredUser",
+      "description": "A user registered in the system with a specific role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "addedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "addedAt"]
+    }
+  },
+  "firestore": {
+    "collaborators": {
+      "schema": "Collaborator",
+      "description": "Collection of all collaborators"
+    },
+    "records": {
+      "schema": "VacationRecord",
+      "description": "Collection of all vacation records"
+    },
+    "holidays": {
+      "schema": "Holiday",
+      "description": "Collection of all holidays"
+    },
+    "logs": {
+      "schema": "AuditLog",
+      "description": "Collection of audit logs"
+    },
+    "registered_users": {
+      "schema": "RegisteredUser",
+      "description": "Collection of users with specific access roles"
+    },
+    "settings": {
+      "schema": "object",
+      "description": "System settings like branding"
+    }
+  }
+}

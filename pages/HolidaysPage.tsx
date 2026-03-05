@@ -44,7 +44,7 @@ interface RawHolidayRecord {
 const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.USER;
+  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
   const canEdit = user?.role === UserRole.ADMIN;
   const canDelete = user?.role === UserRole.ADMIN;
 

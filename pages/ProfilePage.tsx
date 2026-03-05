@@ -259,7 +259,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                <div className="p-6 bg-[#0D1117] rounded-3xl border border-[#30363D] flex items-start gap-4">
                   <ShieldAlert size={20} className="text-[#1F6FEB] shrink-0" />
                   <p className="text-[10px] text-[#8B949E] font-bold uppercase tracking-widest leading-relaxed">
-                    {user.role === UserRole.USER 
+                    {user.role === UserRole.COMMON 
                       ? "SEU PERFIL PERMITE VISUALIZAÇÃO E LANÇAMENTO DE DADOS. PARA EXCLUSÕES OU EDIÇÕES, ENTRE EM CONTATO COM A GESTORA."
                       : "SEU PERFIL É LIMITADO À VISUALIZAÇÃO DE DADOS. PARA ALTERAÇÕES DE SALDO, ENTRE EM CONTATO COM A GESTORA DO SISTEMA."}
                   </p>

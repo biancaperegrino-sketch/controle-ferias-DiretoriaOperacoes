@@ -1,91 +1,166 @@
-
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import { HashRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import * as React from 'react';
+import { useState, useEffect, createContext, useContext, Component } from 'react';
+import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { 
-  Users, 
-  Calendar, 
-  LayoutDashboard, 
-  Palmtree, 
-  Menu, 
-  X,
-  FileText,
-  LogOut,
-  User as UserIcon,
-  ShieldCheck,
-  History,
-  Lock,
-  BarChart3,
-  FileUp,
-  Settings,
-  ShieldAlert,
-  ShieldX,
-  Calculator,
-  Eye
-} from 'lucide-react';
-
-import { Collaborator, VacationRecord, Holiday, User, UserRole, AuditLog, RegisteredUser } from './types';
-import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
+  onAuthStateChanged, 
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
 import { 
   collection, 
   onSnapshot, 
-  doc, 
-  setDoc, 
-  addDoc, 
-  deleteDoc, 
-  updateDoc, 
   query, 
   orderBy, 
-  limit,
-  getDoc,
-  writeBatch
+  limit, 
+  doc, 
+  setDoc, 
+  addDoc,
+  getDocs,
+  getDocFromServer
 } from 'firebase/firestore';
-import { 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { auth, db } from './src/lib/firebase';
+import { ShieldAlert } from 'lucide-react';
+import { auth, db, googleProvider } from './src/lib/firebase';
+import { User, UserRole, Collaborator, VacationRecord, Holiday, AuditLog, RegisteredUser } from './types';
+import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
 
+// Components
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import CollaboratorsPage from './pages/CollaboratorsPage';
 import VacationsPage from './pages/VacationsPage';
 import HolidaysPage from './pages/HolidaysPage';
 import IndividualReport from './pages/IndividualReport';
-import LoginPage from './pages/LoginPage';
-import ProfilePage from './pages/ProfilePage';
 import ImportPage from './pages/ImportPage';
+import ProfilePage from './pages/ProfilePage';
+import AuditLogPage from './pages/AuditLogPage';
+import LoginPage from './pages/LoginPage';
 
-// REGRA DE OURO: Administrador Único Fixo
-const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
+const DEFAULT_LOGO = "https://picsum.photos/seed/institutional/400/100";
+const ROOT_ADMIN_EMAIL = "biancaperegrino@gmail.com";
 
-const DEFAULT_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 160'%3E%3Cpath d='M10 20 L100 20 L70 65 L-20 65 Z' fill='%23004b8d'/%3E%3Cpath d='M45 75 L135 75 L105 120 L15 120 Z' fill='%23009fe3'/%3E%3Ctext x='150' y='75' font-family='Arial Black, sans-serif' font-weight='900' font-size='82' letter-spacing='-4' fill='%23004b8d'%3EFGV%3C/text%3E%3Ctext x='355' y='75' font-family='Arial Black, sans-serif' font-weight='900' font-size='82' letter-spacing='-4' fill='%23009fe3'%3EDO%3C/text%3E%3Ctext x='150' y='115' font-family='Arial, sans-serif' font-weight='700' font-size='38' fill='%238b8c8e'%3EDIRETORIA%3C/text%3E%3Ctext x='150' y='152' font-family='Arial, sans-serif' font-weight='700' font-size='38' fill='%238b8c8e'%3EDE OPERAÇÕES%3C/text%3E%3C/svg%3E";
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+class ErrorBoundary extends (React.Component as any) {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if ((this as any).state.hasError) {
+      let message = "Ocorreu um erro inesperado.";
+      const error = (this as any).state.error;
+      if (error && error.message) {
+        try {
+          const errObj = JSON.parse(error.message);
+          if (errObj.error && errObj.error.includes("insufficient permissions")) {
+            message = "Você não tem permissão para acessar estes dados. Por favor, contate o administrador.";
+          }
+        } catch (e) {
+          // Not a JSON error
+        }
+      }
+
+      return (
+        <div className="min-h-screen bg-[#0D1117] flex items-center justify-center p-4">
+          <div className="bg-[#161B22] border border-[#30363D] p-8 rounded-[2rem] max-w-md w-full text-center space-y-6">
+            <ShieldAlert size={48} className="mx-auto text-rose-500" />
+            <h2 className="text-xl font-black text-white uppercase tracking-widest">Erro de Acesso</h2>
+            <p className="text-[#8B949E] text-sm leading-relaxed">{message}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-[#1F6FEB] text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-[#388BFD] transition-all"
+            >
+              Recarregar Sistema
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (this as any).props.children;
+  }
+}
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<{success: boolean; message?: string}>;
-  logout: () => void;
-  addLog: (action: string) => void;
+  login: () => Promise<{ success: boolean; message?: string }>;
+  logout: () => Promise<void>;
+  addLog: (action: string) => Promise<void>;
   isAuthenticated: boolean;
-  loading: boolean;
+  isAuthReady: boolean;
   logo: string;
-  updateLogo: (newLogo: string) => void;
-  resetLogo: () => void;
+  updateLogo: (newLogo: string) => Promise<void>;
+  resetLogo: () => Promise<void>;
   registeredUsers: RegisteredUser[];
   setRegisteredUsers: React.Dispatch<React.SetStateAction<RegisteredUser[]>>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth deve ser usado dentro de um AuthProvider");
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 };
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [logo, setLogo] = useState<string>(DEFAULT_LOGO);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -95,122 +170,142 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(true);
   const [showSyncToast, setShowSyncToast] = useState(false);
 
+  // Connection test
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'settings', 'branding'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    };
+    testConnection();
+  }, []);
+
   // Auth State Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && firebaseUser.email) {
-        // Fetch user role from Firestore
-        const userDoc = await getDoc(doc(db, 'registered_users', firebaseUser.uid));
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const lowerEmail = firebaseUser.email?.toLowerCase() || '';
+        
+        // Fetch registered user info
+        const userDoc = await getDocs(query(collection(db, 'registered_users'), orderBy('addedAt', 'desc')));
+        const list = userDoc.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
+        const registered = list.find(u => u.email === lowerEmail);
+        
         let role = UserRole.VIEWER;
-        let name = firebaseUser.email.split('@')[0].replace('.', ' ').toUpperCase();
-
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          role = data.role;
-          name = data.name;
-        } else if (firebaseUser.email === ROOT_ADMIN_EMAIL) {
+        if (lowerEmail === ROOT_ADMIN_EMAIL) {
           role = UserRole.ADMIN;
-          name = 'BIANCA BOMFIM';
+        } else if (registered) {
+          role = registered.role;
         }
 
         setUser({
           id: firebaseUser.uid,
-          name: name,
-          email: firebaseUser.email,
+          name: firebaseUser.displayName || lowerEmail.split('@')[0].toUpperCase(),
+          email: lowerEmail,
           unit: 'SEDE',
-          role: role
+          role: role,
+          avatarUrl: firebaseUser.photoURL || undefined
         });
       } else {
         setUser(null);
       }
-      setLoading(false);
+      setIsAuthReady(true);
     });
-    return unsubscribe;
+    return unsub;
   }, []);
 
   // Real-time Sync: Registered Users
   useEffect(() => {
+    if (!isAuthReady) return;
     const unsub = onSnapshot(collection(db, 'registered_users'), (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
       
       // Ensure root admin exists in Firestore if not present
       const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL);
-      if (!hasRoot) {
+      if (hasRoot === undefined && user?.role === UserRole.ADMIN) {
         const rootId = 'root-admin';
         setDoc(doc(db, 'registered_users', rootId), {
+          id: rootId,
           name: 'BIANCA BOMFIM',
           email: ROOT_ADMIN_EMAIL,
           role: UserRole.ADMIN,
           addedAt: new Date().toISOString()
-        });
+        }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'registered_users'));
       }
       setRegisteredUsers(list);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'registered_users'));
     return unsub;
-  }, []);
+  }, [isAuthReady, user]);
 
   // Real-time Sync: Collaborators
   useEffect(() => {
+    if (!isAuthReady || !user) return;
     const unsub = onSnapshot(collection(db, 'collaborators'), (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Collaborator));
-      if (list.length === 0 && isSyncing) {
-        // Seed initial data if empty
-        INITIAL_COLLABORATORS.forEach(c => setDoc(doc(db, 'collaborators', c.id), c));
+      if (list.length === 0 && isSyncing && user.role === UserRole.ADMIN) {
+        INITIAL_COLLABORATORS.forEach(c => setDoc(doc(db, 'collaborators', c.id), c).catch(e => handleFirestoreError(e, OperationType.WRITE, 'collaborators')));
       }
       setCollaborators(list.sort((a, b) => a.name.localeCompare(b.name)));
       if (!isSyncing) setShowSyncToast(true);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'collaborators'));
     return unsub;
-  }, [isSyncing]);
+  }, [isAuthReady, user, isSyncing]);
 
   // Real-time Sync: Records
   useEffect(() => {
+    if (!isAuthReady || !user) return;
     const unsub = onSnapshot(collection(db, 'records'), (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRecord));
-      if (list.length === 0 && isSyncing) {
-        INITIAL_RECORDS.forEach(r => setDoc(doc(db, 'records', r.id), r));
+      if (list.length === 0 && isSyncing && user.role === UserRole.ADMIN) {
+        INITIAL_RECORDS.forEach(r => setDoc(doc(db, 'records', r.id), r).catch(e => handleFirestoreError(e, OperationType.WRITE, 'records')));
       }
       setRecords(list);
       if (!isSyncing) setShowSyncToast(true);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'records'));
     return unsub;
-  }, [isSyncing]);
+  }, [isAuthReady, user, isSyncing]);
 
   // Real-time Sync: Holidays
   useEffect(() => {
+    if (!isAuthReady || !user) return;
     const unsub = onSnapshot(collection(db, 'holidays'), (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Holiday));
-      if (list.length === 0 && isSyncing) {
-        INITIAL_HOLIDAYS.forEach(h => setDoc(doc(db, 'holidays', h.id), h));
+      if (list.length === 0 && isSyncing && user.role === UserRole.ADMIN) {
+        INITIAL_HOLIDAYS.forEach(h => setDoc(doc(db, 'holidays', h.id), h).catch(e => handleFirestoreError(e, OperationType.WRITE, 'holidays')));
       }
       setHolidays(list);
       if (!isSyncing) setShowSyncToast(true);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'holidays'));
     return unsub;
-  }, [isSyncing]);
+  }, [isAuthReady, user, isSyncing]);
 
   // Real-time Sync: Logs
   useEffect(() => {
+    if (!isAuthReady || !user) return;
     const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuditLog));
       setLogs(list);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'logs'));
     return unsub;
-  }, []);
+  }, [isAuthReady, user]);
 
   // Real-time Sync: Settings (Logo)
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'branding'), (docSnap) => {
       if (docSnap.exists()) {
         setLogo(docSnap.data().logo || DEFAULT_LOGO);
-      } else {
-        setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO });
+      } else if (user?.role === UserRole.ADMIN) {
+        setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'settings/branding'));
       }
       setIsSyncing(false);
-    });
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'settings/branding'));
     return unsub;
-  }, []);
+  }, [user]);
 
   // Auto-hide sync toast
   useEffect(() => {
@@ -222,14 +317,22 @@ const App: React.FC = () => {
 
   const updateLogo = async (newLogo: string) => {
     if (user?.role !== UserRole.ADMIN) return;
-    await setDoc(doc(db, 'settings', 'branding'), { logo: newLogo });
-    addLog("Atualizou a identidade visual do sistema");
+    try {
+      await setDoc(doc(db, 'settings', 'branding'), { logo: newLogo });
+      addLog("Atualizou a identidade visual do sistema");
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'settings/branding');
+    }
   };
 
   const resetLogo = async () => {
     if (user?.role !== UserRole.ADMIN) return;
-    await setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO });
-    addLog("Restaurou o branding institucional padrão");
+    try {
+      await setDoc(doc(db, 'settings', 'branding'), { logo: DEFAULT_LOGO });
+      addLog("Restaurou o branding institucional padrão");
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'settings/branding');
+    }
   };
 
   const addLog = async (action: string) => {
@@ -240,36 +343,19 @@ const App: React.FC = () => {
       action,
       timestamp: new Date().toISOString()
     };
-    await addDoc(collection(db, 'logs'), newLog);
-  };
-
-  // Wrapper setters to update Firestore
-  const setCollaboratorsFirestore = async (value: React.SetStateAction<Collaborator[]>) => {
-    if (typeof value === 'function') {
-      const next = value(collaborators);
-      // This is simplified. In a real app, you'd diff or use batch.
-      // For this app, we'll implement specific handlers in pages or use this for bulk.
-      // But since pages use these setters, we need to be careful.
+    try {
+      await addDoc(collection(db, 'logs'), newLog);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'logs');
     }
   };
 
-  // We'll pass specialized handlers to pages instead of raw setters where possible,
-  // or update the pages to use Firestore directly.
-  // For now, let's keep the setters but they will be "read-only" from Firestore sync,
-  // and we'll provide mutation functions in the context or as props.
-
-  const login = async (email: string, password: string) => {
+  const login = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      addLog(`Acesso realizado`);
+      await signInWithPopup(auth, googleProvider);
       return { success: true };
     } catch (error: any) {
-      console.error("Login error:", error);
-      let message = "Erro ao realizar login.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        message = "E-mail ou senha incorretos.";
-      }
-      return { success: false, message };
+      return { success: false, message: error.message };
     }
   };
 
@@ -278,179 +364,71 @@ const App: React.FC = () => {
     await signOut(auth);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0D1117] flex flex-col items-center justify-center space-y-6">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1F6FEB]"></div>
-        <p className="text-[#8B949E] font-black uppercase tracking-[0.3em] text-[10px]">Carregando Ambiente Seguro...</p>
-      </div>
-    );
-  }
-
   return (
-    <AuthContext.Provider value={{ 
-      user, login, logout, addLog, isAuthenticated: !!user, loading,
-      logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers
-    }}>
-      <HashRouter>
-        <Routes>
-          <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
-          <Route path="/*" element={
-            user ? (
-              <div className="flex min-h-screen bg-[#0D1117]">
-                <Sidebar />
-                <main className="flex-1 flex flex-col md:ml-64">
-                  <Header />
-                  <div className="p-4 md:p-8">
-                    <Routes>
-                      <Route path="/" element={<Dashboard collaborators={collaborators} records={records} holidays={holidays} />} />
-                      <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={records} />} />
-                      <Route path="/collaborators" element={<CollaboratorsPage collaborators={collaborators} setCollaborators={setCollaborators} />} />
-                      <Route path="/vacations" element={
-                        <VacationsPage 
-                          records={records} 
-                          collaborators={collaborators} 
-                          holidays={holidays} 
-                        />
-                      } />
-                      <Route path="/holidays" element={<HolidaysPage holidays={holidays} />} />
-                      <Route path="/report" element={<IndividualReport collaborators={collaborators} records={records} />} />
-                      <Route path="/import" element={
-                        user.role === UserRole.ADMIN ? (
-                          <ImportPage 
-                            collaborators={collaborators} 
-                            records={records} 
-                          />
-                        ) : (
-                          <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">
-                            <ShieldAlert size={64} className="mx-auto text-rose-500 opacity-50" />
-                            <h3 className="text-xl font-black uppercase text-white tracking-widest leading-relaxed">Você não tem permissão para acessar esta página.</h3>
-                            <Link to="/" className="inline-block bg-[#1F6FEB] text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-[#388BFD] transition-all">Voltar ao Dashboard</Link>
-                          </div>
-                        )
-                      } />
-                      <Route path="/profile" element={<ProfilePage logs={logs} />} />
-                    </Routes>
+    <ErrorBoundary>
+      <AuthContext.Provider value={{ 
+        user, login, logout, addLog, isAuthenticated: !!user, 
+        logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers,
+        isAuthReady
+      }}>
+        <HashRouter>
+          {isAuthReady ? (
+            <Routes>
+              <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
+              <Route path="/*" element={
+                user ? (
+                  <div className="flex min-h-screen bg-[#0D1117]">
+                    <Sidebar />
+                    <main className="flex-1 flex flex-col md:ml-64">
+                      <Header />
+                      <div className="p-4 md:p-8">
+                        <Routes>
+                          <Route path="/" element={<Dashboard collaborators={collaborators} records={records} holidays={holidays} />} />
+                          <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={records} />} />
+                          <Route path="/collaborators" element={<CollaboratorsPage collaborators={collaborators} />} />
+                          <Route path="/vacations" element={
+                            <VacationsPage 
+                              records={records} 
+                              collaborators={collaborators} 
+                              holidays={holidays} 
+                            />
+                          } />
+                          <Route path="/holidays" element={<HolidaysPage holidays={holidays} />} />
+                          <Route path="/report" element={<IndividualReport collaborators={collaborators} records={records} />} />
+                          <Route path="/import" element={
+                            user.role === UserRole.ADMIN ? (
+                              <ImportPage 
+                                collaborators={collaborators} 
+                                records={records} 
+                              />
+                            ) : (
+                              <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">
+                                <ShieldAlert size={64} className="mx-auto text-rose-500 opacity-50" />
+                                <h3 className="text-xl font-black uppercase text-white tracking-widest leading-relaxed">Você não tem permissão para acessar esta página.</h3>
+                                <Link to="/" className="inline-block bg-[#1F6FEB] text-white px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-[#388BFD] transition-all">Voltar ao Dashboard</Link>
+                              </div>
+                            )
+                          } />
+                          <Route path="/profile" element={<ProfilePage logs={logs} />} />
+                          <Route path="/audit" element={<AuditLogPage logs={logs} />} />
+                        </Routes>
+                      </div>
+                    </main>
                   </div>
-                </main>
+                ) : <Navigate to="/login" />
+              } />
+            </Routes>
+          ) : (
+            <div className="min-h-screen flex items-center justify-center bg-[#0D1117]">
+              <div className="animate-pulse flex flex-col items-center gap-4">
+                <div className="h-12 w-12 bg-[#1F6FEB] rounded-full"></div>
+                <p className="text-[#8B949E] font-black uppercase tracking-[0.3em] text-[10px]">Carregando Sistema...</p>
               </div>
-            ) : <Navigate to="/login" />
-          } />
-        </Routes>
-      </HashRouter>
-    </AuthContext.Provider>
-  );
-};
-
-const Header: React.FC = () => {
-  const { user, logo } = useAuth();
-  return (
-    <header className="h-16 bg-[#161B22] border-b border-[#30363D] flex items-center justify-between px-6 sticky top-0 z-10 shadow-md">
-      <div className="flex items-center gap-4">
-        <div className="bg-white p-1 rounded-lg h-10 w-auto flex items-center justify-center min-w-[100px]">
-          <img src={logo} alt="Branding" className="h-8 w-auto object-contain" />
-        </div>
-        <h1 className="text-[10px] md:text-xs font-black text-white tracking-tight truncate uppercase border-l border-[#30363D] pl-4">
-          Controle de Saldo de Férias
-        </h1>
-      </div>
-      <div className="flex items-center gap-4 ml-auto">
-        <div className="text-right hidden sm:block">
-          <p className="text-sm font-bold text-white leading-none">{user?.name}</p>
-          <p className={`text-[9px] font-black uppercase tracking-wider mt-1 ${user?.role === UserRole.ADMIN ? 'text-amber-500' : 'text-[#8B949E]'}`}>
-            {user?.role}
-          </p>
-        </div>
-        <Link to="/profile" className="h-9 w-9 rounded-full bg-[#30363D] border border-[#484F58] flex items-center justify-center text-white font-bold hover:bg-[#1F6FEB] transition-all overflow-hidden shadow-sm">
-          {user?.name.charAt(0)}
-        </Link>
-      </div>
-    </header>
-  );
-};
-
-const Sidebar: React.FC = () => {
-  const location = useLocation();
-  const { user, logout, logo } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
-
-  const navItems = [
-    { label: 'Visão Geral', icon: LayoutDashboard, path: '/' },
-    { label: 'Dashboard', icon: BarChart3, path: '/analytics' },
-    { label: 'Colaboradores', icon: Users, path: '/collaborators' },
-    { label: 'Gestão de Férias', icon: Palmtree, path: '/vacations' },
-    { label: 'Dossiê Individual', icon: FileText, path: '/report' },
-    { label: 'Feriados', icon: Calendar, path: '/holidays' },
-    { label: 'Importar Dados', icon: FileUp, path: '/import', adminOnly: true },
-  ].filter(item => !item.adminOnly || user?.role === UserRole.ADMIN);
-
-  return (
-    <>
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed bottom-6 right-6 z-50 bg-[#1F6FEB] text-white p-4 rounded-full shadow-2xl hover:bg-[#388BFD] transition-all active:scale-95"
-      >
-        {isOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
-      <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-[#161B22] text-[#8B949E] border-r border-[#30363D] transition-transform duration-300 transform
-        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-      `}>
-        <div className="p-6 h-full flex flex-col">
-          <div className="mb-10 px-2">
-            <div className="bg-white p-4 rounded-2xl shadow-lg mb-4 flex items-center justify-center min-h-[80px]">
-              <img src={logo} alt="Logo" className="h-14 w-auto object-contain" />
             </div>
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.3em] text-[#484F58]">
-              <ShieldCheck size={12} className="text-[#1F6FEB]" />
-              Painel de Controle
-            </div>
-          </div>
-
-          <nav className="space-y-1 flex-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setIsOpen(false)}
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all
-                    ${isActive 
-                      ? 'bg-[#1F6FEB] text-white shadow-lg' 
-                      : 'hover:bg-[#30363D] hover:text-white'}
-                  `}
-                >
-                  <Icon size={16} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="mt-auto pt-6 border-t border-[#30363D] space-y-1">
-            <Link 
-              to="/profile"
-              onClick={() => setIsOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${location.pathname === '/profile' ? 'bg-[#30363D] text-white' : 'hover:bg-[#30363D]'}`}
-            >
-              {user?.role === UserRole.ADMIN ? <Settings size={16} /> : <UserIcon size={16} />}
-              <span>{user?.role === UserRole.ADMIN ? 'Configurações' : 'Meu Perfil'}</span>
-            </Link>
-            <button 
-              onClick={logout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-900/20 text-rose-500 transition-colors"
-            >
-              <LogOut size={16} />
-              <span>Sair do Sistema</span>
-            </button>
-          </div>
-        </div>
-      </aside>
-    </>
+          )}
+        </HashRouter>
+      </AuthContext.Provider>
+    </ErrorBoundary>
   );
 };
 
