@@ -1,10 +1,11 @@
 
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, OAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const microsoftProvider = new OAuthProvider('microsoft.com');
+const googleProvider = new GoogleAuthProvider();
+export { googleProvider };
