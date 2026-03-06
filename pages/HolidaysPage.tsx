@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils/dateUtils';
 import { useAuth } from '../App';
-import ConfirmModal from '@/components/ConfirmModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 import { db } from '../src/lib/firebase';
 import { doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
@@ -59,6 +59,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   const [rawRecords, setRawRecords] = useState<RawHolidayRecord[]>([]);
   const [isValidated, setIsValidated] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [columnMappingError, setColumnMappingError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,14 +146,18 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
-          const bstr = event.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
+          const dataBuffer = event.target?.result;
+          if (!dataBuffer) throw new Error("Falha ao ler arquivo.");
+          
+          const wb = XLSX.read(dataBuffer, { type: 'array', cellDates: true });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
+          if (!ws) throw new Error("Planilha não encontrada no arquivo.");
+          
           const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
           
           if (data.length < 2) {
-            setColumnMappingError("O arquivo parece estar vazio.");
+            setColumnMappingError("O arquivo parece estar vazio ou sem cabeçalhos.");
             return;
           }
 
@@ -163,19 +168,19 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           };
 
           const map = {
-            nome: getIndex(['nome', 'feriado', 'descrição']),
-            data: getIndex(['data', 'dia']),
-            tipo: getIndex(['tipo']),
-            estado: getIndex(['estado', 'uf'])
+            nome: getIndex(['nome', 'feriado', 'descrição', 'holiday', 'name']),
+            data: getIndex(['data', 'dia', 'date', 'day']),
+            tipo: getIndex(['tipo', 'type', 'âmbito']),
+            estado: getIndex(['estado', 'uf', 'state', 'region'])
           };
 
           if (map.nome === -1 || map.data === -1) {
-            setColumnMappingError("Colunas 'Nome' e 'Data' são obrigatórias.");
+            setColumnMappingError("Colunas obrigatórias ('Nome' e 'Data') não identificadas automaticamente.");
             return;
           }
 
           const parsed: RawHolidayRecord[] = data.slice(1)
-            .filter(row => row.length > 0 && row[map.nome])
+            .filter(row => row && row.length > 0 && row[map.nome])
             .map(row => {
               let dateVal = row[map.data];
               if (dateVal instanceof Date) {
@@ -190,12 +195,18 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
               };
             });
 
-          setRawRecords(parsed);
+          if (parsed.length === 0) {
+            setColumnMappingError("Nenhum registro válido encontrado na planilha.");
+          } else {
+            setRawRecords(parsed);
+            setColumnMappingError(null);
+          }
         } catch (err) {
-          setColumnMappingError("Erro ao processar planilha.");
+          console.error("Import error:", err);
+          setColumnMappingError("Erro ao processar planilha. Verifique se o arquivo está corrompido.");
         }
       };
-      reader.readAsBinaryString(selectedFile);
+      reader.readAsArrayBuffer(selectedFile);
     }
   };
 
@@ -214,39 +225,51 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   };
 
   const validateData = () => {
-    const validated = rawRecords.map(record => {
-      const errors: string[] = [];
-      if (!record.nome) errors.push("Nome ausente");
-      
-      const normalizedDate = normalizeDate(record.data);
-      if (!normalizedDate) errors.push(`Data inválida: "${record.data}"`);
-
-      const validTypes = Object.values(HolidayType) as string[];
-      let matchedType = validTypes.find(t => t.toLowerCase() === record.tipo.toLowerCase());
-      if (!matchedType) {
-        if (record.tipo.toLowerCase().includes('nac')) matchedType = HolidayType.NACIONAL;
-        else if (record.tipo.toLowerCase().includes('est')) matchedType = HolidayType.ESTADUAL;
-        else if (record.tipo.toLowerCase().includes('mun')) matchedType = HolidayType.MUNICIPAL;
-      }
-      
-      if (!matchedType) errors.push(`Tipo inválido: "${record.tipo}"`);
-      
-      if (matchedType === HolidayType.ESTADUAL && !record.estado) {
-        errors.push("UF obrigatória para estadual");
+    try {
+      if (rawRecords.length === 0) {
+        setColumnMappingError("Nenhum dado encontrado para validar.");
+        return;
       }
 
-      return {
-        ...record,
-        isValid: errors.length === 0,
-        errors,
-        data: normalizedDate || record.data,
-        tipo: matchedType || record.tipo,
-        estado: record.estado.toUpperCase().substring(0, 2)
-      };
-    });
+      const validated = rawRecords.map(record => {
+        const errors: string[] = [];
+        if (!record.nome) errors.push("Nome ausente");
+        
+        const normalizedDate = normalizeDate(record.data);
+        if (!normalizedDate) errors.push(`Data inválida: "${record.data}"`);
 
-    setRawRecords(validated);
-    setIsValidated(true);
+        const validTypes = Object.values(HolidayType) as string[];
+        let matchedType = validTypes.find(t => t.toLowerCase() === (record.tipo || '').toLowerCase());
+        if (!matchedType) {
+          const tipoLower = (record.tipo || '').toLowerCase();
+          if (tipoLower.includes('nac')) matchedType = HolidayType.NACIONAL;
+          else if (tipoLower.includes('est')) matchedType = HolidayType.ESTADUAL;
+          else if (tipoLower.includes('mun')) matchedType = HolidayType.MUNICIPAL;
+        }
+        
+        if (!matchedType) errors.push(`Tipo inválido: "${record.tipo}"`);
+        
+        if (matchedType === HolidayType.ESTADUAL && !record.estado) {
+          errors.push("UF obrigatória para estadual");
+        }
+
+        return {
+          ...record,
+          isValid: errors.length === 0,
+          errors,
+          data: normalizedDate || record.data,
+          tipo: matchedType || record.tipo,
+          estado: (record.estado || '').toUpperCase().substring(0, 2)
+        };
+      });
+
+      setRawRecords(validated);
+      setIsValidated(true);
+      setColumnMappingError(null);
+    } catch (err) {
+      console.error("Validation error:", err);
+      setColumnMappingError("Erro crítico durante a validação. Verifique se as colunas estão corretas.");
+    }
   };
 
   const processImport = async () => {
@@ -286,7 +309,8 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     setRawRecords([]);
     setIsValidated(false);
     setIsImportMode(false);
-    alert(`Calendário operacional atualizado.`);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 5000);
   };
 
   const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -325,6 +349,16 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           )}
         </div>
       </header>
+
+      {showSuccess && (
+        <div className="bg-emerald-950/20 border border-emerald-500/30 p-6 rounded-3xl flex items-start gap-4 animate-in slide-in-from-top-4">
+          <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+          <div>
+            <p className="font-black text-emerald-500 text-xs uppercase tracking-widest">Importação Concluída</p>
+            <p className="text-[#8B949E] text-xs mt-2 font-bold uppercase tracking-tight leading-relaxed">O calendário de feriados foi atualizado com sucesso.</p>
+          </div>
+        </div>
+      )}
 
       {isImportMode ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

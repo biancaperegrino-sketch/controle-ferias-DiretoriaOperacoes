@@ -39,6 +39,7 @@ import LoginPage from './pages/LoginPage';
 
 const DEFAULT_LOGO = "https://picsum.photos/seed/institutional/400/100";
 const ROOT_ADMIN_EMAIL = "biancaperegrino@gmail.com";
+const CORPORATE_ADMIN_EMAIL = "bianca.bomfim@fgv.br";
 
 enum OperationType {
   CREATE = 'create',
@@ -169,6 +170,7 @@ const App: React.FC = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [showSyncToast, setShowSyncToast] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Connection test
   useEffect(() => {
@@ -196,10 +198,17 @@ const App: React.FC = () => {
         const registered = list.find(u => u.email === lowerEmail);
         
         let role = UserRole.VIEWER;
-        if (lowerEmail === ROOT_ADMIN_EMAIL) {
+        if (lowerEmail === ROOT_ADMIN_EMAIL || lowerEmail === CORPORATE_ADMIN_EMAIL) {
           role = UserRole.ADMIN;
         } else if (registered) {
           role = registered.role;
+        } else if (lowerEmail.endsWith('@fgv.br')) {
+          role = UserRole.VIEWER;
+        } else {
+          // If not root admin, not registered, and not corporate domain, 
+          // we still allow viewer by default as per current logic, 
+          // but now we've explicitly enabled @fgv.br
+          role = UserRole.VIEWER;
         }
 
         setUser({
@@ -225,13 +234,13 @@ const App: React.FC = () => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
       
       // Ensure root admin exists in Firestore if not present
-      const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL);
+      const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL || u.email === CORPORATE_ADMIN_EMAIL);
       if (hasRoot === undefined && user?.role === UserRole.ADMIN) {
         const rootId = 'root-admin';
         setDoc(doc(db, 'registered_users', rootId), {
           id: rootId,
           name: 'BIANCA BOMFIM',
-          email: ROOT_ADMIN_EMAIL,
+          email: CORPORATE_ADMIN_EMAIL,
           role: UserRole.ADMIN,
           addedAt: new Date().toISOString()
         }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'registered_users'));
@@ -378,11 +387,12 @@ const App: React.FC = () => {
               <Route path="/*" element={
                 user ? (
                   <div className="flex min-h-screen bg-[#0D1117]">
-                    <Sidebar />
-                    <main className="flex-1 flex flex-col md:ml-64">
-                      <Header />
-                      <div className="p-4 md:p-8">
-                        <Routes>
+                    <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+                    <main className="flex-1 flex flex-col md:ml-72">
+                      <Header onMenuClick={() => setSidebarOpen(true)} />
+                      <div className="p-4 md:p-8 flex-1">
+                        <div className="max-w-7xl mx-auto w-full h-full">
+                          <Routes>
                           <Route path="/" element={<Dashboard collaborators={collaborators} records={records} holidays={holidays} />} />
                           <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={records} />} />
                           <Route path="/collaborators" element={<CollaboratorsPage collaborators={collaborators} />} />
@@ -399,7 +409,9 @@ const App: React.FC = () => {
                             user.role === UserRole.ADMIN ? (
                               <ImportPage 
                                 collaborators={collaborators} 
+                                setCollaborators={setCollaborators}
                                 records={records} 
+                                setRecords={setRecords}
                               />
                             ) : (
                               <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">
@@ -413,9 +425,10 @@ const App: React.FC = () => {
                           <Route path="/audit" element={<AuditLogPage logs={logs} />} />
                         </Routes>
                       </div>
-                    </main>
-                  </div>
-                ) : <Navigate to="/login" />
+                    </div>
+                  </main>
+                </div>
+              ) : <Navigate to="/login" />
               } />
             </Routes>
           ) : (

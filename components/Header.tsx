@@ -1,14 +1,24 @@
 import React from 'react';
 import { useAuth } from '../App';
-import { LogOut, User, Bell, Search } from 'lucide-react';
+import { LogOut, User, Bell, Search, Menu } from 'lucide-react';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onMenuClick: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, logout, logo } = useAuth();
 
   return (
-    <header className="h-24 bg-[#0D1117]/80 backdrop-blur-xl border-b border-[#30363D] flex items-center justify-between px-10 sticky top-0 z-40">
-      <div className="flex items-center gap-8 flex-1">
-        <div className="relative w-full max-w-md group">
+    <header className="h-24 bg-[#0D1117]/80 backdrop-blur-xl border-b border-[#30363D] flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
+      <div className="flex items-center gap-4 md:gap-8 flex-1">
+        <button 
+          onClick={onMenuClick}
+          className="md:hidden p-3 text-[#8B949E] hover:text-white hover:bg-[#30363D] rounded-xl transition-all"
+        >
+          <Menu size={24} />
+        </button>
+        <div className="relative w-full max-w-md group hidden sm:block">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58] group-focus-within:text-[#1F6FEB] transition-colors" size={18} />
           <input 
             type="text" 

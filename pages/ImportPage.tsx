@@ -46,6 +46,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
   const [rawRecords, setRawRecords] = useState<RawRecord[]>([]);
   const [isValidated, setIsValidated] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [columnMappingError, setColumnMappingError] = useState<string | null>(null);
   
   const [importHistory, setImportHistory] = useState<ImportHistory[]>(() => {
@@ -171,54 +172,60 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
   };
 
   const validateData = () => {
-    const validated = rawRecords.map(record => {
-      const errors: string[] = [];
-      if (!record.nome) errors.push("Nome é obrigatório");
+    try {
+      if (rawRecords.length === 0) {
+        setColumnMappingError("Nenhum dado encontrado para validar.");
+        return;
+      }
+
+      const validated = rawRecords.map(record => {
+        const errors: string[] = [];
+        if (!record.nome) errors.push("Nome é obrigatório");
+        
+        const validTypes = Object.values(RequestType) as string[];
+        const typeLower = (record.tipo || '').toLowerCase();
+        let matchedType = validTypes.find(t => t.toLowerCase() === typeLower);
+        
+        if (!matchedType && record.tipo) {
+           if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
+           else if (typeLower.includes('agend') || typeLower.includes('rh') || typeLower.includes('marcado')) matchedType = RequestType.AGENDADAS;
+           else if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
+           else if (typeLower.includes('abono') || typeLower.includes('pecun')) matchedType = RequestType.ABONO_PECUNIARIO;
+        }
+
+        const isInitial = matchedType === RequestType.SALDO_INICIAL;
+        const normalizedStart = normalizeDate(record.inicio);
+        const normalizedEnd = normalizeDate(record.fim);
+
+        if (!isInitial) {
+          if (!normalizedStart) errors.push(`Início obrigatório`);
+          if (!normalizedEnd) errors.push(`Fim obrigatório`);
+        }
+
+        const finalStart = normalizedStart || new Date().toISOString().split('T')[0];
+        const finalEnd = normalizedEnd || finalStart;
+
+        if (!matchedType) {
+          errors.push(`Tipo desconhecido: "${record.tipo}"`);
+        }
+
+        return { 
+          ...record, 
+          isValid: errors.length === 0, 
+          errors,
+          inicio: finalStart,
+          fim: finalEnd,
+          tipo: matchedType || record.tipo
+        };
+      });
       
-      const validTypes = Object.values(RequestType) as string[];
-      const typeLower = record.tipo.toLowerCase();
-      let matchedType = validTypes.find(t => t.toLowerCase() === typeLower);
-      
-      if (!matchedType && record.tipo) {
-         if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
-         else if (typeLower.includes('agend') || typeLower.includes('rh') || typeLower.includes('marcado')) matchedType = RequestType.AGENDADAS;
-         else if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
-         else if (typeLower.includes('abono') || typeLower.includes('pecun')) matchedType = RequestType.ABONO_PECUNIARIO;
-      }
-
-      const isInitial = matchedType === RequestType.SALDO_INICIAL;
-      const isDesconto = matchedType === RequestType.DESCONTO;
-      const isAgendada = matchedType === RequestType.AGENDADAS;
-      const normalizedStart = normalizeDate(record.inicio);
-      const normalizedEnd = normalizeDate(record.fim);
-
-      // Apenas Saldo Inicial não exige datas. 
-      // Descontos e Férias Agendadas exigem datas para rastreabilidade.
-      if (!isInitial) {
-        if (!normalizedStart) errors.push(`Início obrigatório`);
-        if (!normalizedEnd) errors.push(`Fim obrigatório`);
-      }
-
-      // Se não tiver data, usamos a data atual como referência para não travar a importação
-      const finalStart = normalizedStart || new Date().toISOString().split('T')[0];
-      const finalEnd = normalizedEnd || finalStart;
-
-      if (!matchedType) {
-        errors.push(`Tipo desconhecido: "${record.tipo}"`);
-      }
-
-      return { 
-        ...record, 
-        isValid: errors.length === 0, 
-        errors,
-        inicio: finalStart,
-        fim: finalEnd,
-        tipo: matchedType || record.tipo
-      };
-    });
-    
-    setRawRecords(validated);
-    setIsValidated(true);
+      setRawRecords(validated);
+      setIsValidated(true);
+      setColumnMappingError(null);
+    } catch (err) {
+      console.error("Validation error:", err);
+      setColumnMappingError("Erro crítico durante a validação. Verifique o formato do CSV.");
+    }
   };
 
   const processImport = async () => {
@@ -280,7 +287,8 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
     setFile(null);
     setRawRecords([]);
     setIsValidated(false);
-    alert(`Importação de dados concluída com sucesso.`);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 5000);
   };
 
   return (
@@ -297,6 +305,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
           </div>
         )}
       </header>
+
+      {showSuccess && (
+        <div className="bg-emerald-950/20 border border-emerald-500/30 p-6 rounded-3xl flex items-start gap-4 animate-in slide-in-from-top-4">
+          <CheckCircle2 className="text-emerald-500 shrink-0" size={24} />
+          <div>
+            <p className="font-black text-emerald-500 text-xs uppercase tracking-widest">Importação Concluída</p>
+            <p className="text-[#8B949E] text-xs mt-2 font-bold uppercase tracking-tight leading-relaxed">Os dados foram validados e carregados com sucesso para o sistema.</p>
+          </div>
+        </div>
+      )}
 
       {columnMappingError && (
         <div className="bg-rose-950/20 border border-rose-500/30 p-6 rounded-3xl flex items-start gap-4 animate-in slide-in-from-top-4">

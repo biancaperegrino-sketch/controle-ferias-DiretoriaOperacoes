@@ -15,7 +15,7 @@ const LoginPage: React.FC = () => {
     
     const result = await login();
     if (!result.success) {
-      setError(result.message || "Erro ao realizar login com Google.");
+      setError(result.message || "Erro ao realizar login com Microsoft.");
       setLoading(false);
     }
   };
@@ -52,8 +52,8 @@ const LoginPage: React.FC = () => {
                     onClick={handleLogin}
                     className="w-full flex items-center justify-center gap-4 bg-white hover:bg-gray-50 text-gray-900 px-6 py-4 rounded-2xl transition-all shadow-lg active:scale-95 group border border-gray-200"
                   >
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Google</span>
+                    <img src="https://www.svgrepo.com/show/303217/microsoft-logo.svg" alt="Microsoft" className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Microsoft</span>
                     <ArrowRight size={16} className="text-gray-400 group-hover:text-gray-900 transition-colors" />
                   </button>
                 </div>

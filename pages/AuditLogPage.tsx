@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AuditLog, UserRole } from '../types';
-import { Clock, User as UserIcon, Activity, ShieldCheck, Search } from 'lucide-react';
+import { Clock, User as UserIcon, Activity, ShieldCheck, Search, History } from 'lucide-react';
 import { useAuth } from '../App';
 
 interface AuditLogPageProps {

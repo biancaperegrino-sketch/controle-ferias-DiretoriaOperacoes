@@ -16,7 +16,9 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
-  History
+  History,
+  Search,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -43,6 +45,11 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
   const [lock, setLock] = useState<{userId: string, userName: string} | null>(null);
+  
+  const [filters, setFilters] = useState({
+    search: '',
+    collaboratorId: ''
+  });
 
   // Listen for locks
   useEffect(() => {
@@ -95,6 +102,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     holidaysCount: 0
   });
 
+  const [modalSearchText, setModalSearchText] = useState('');
+
   const isInitialBalance = formData.type === RequestType.SALDO_INICIAL;
 
   useEffect(() => {
@@ -136,6 +145,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         manualDays: isInitial ? record.businessDays.toString() : '',
         observation: record.observation || ''
       });
+      setModalSearchText(collaborators.find(c => c.id === record.collaboratorId)?.name || '');
       setMetrics({
         calendarDays: record.calendarDays,
         businessDays: record.businessDays,
@@ -155,6 +165,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         manualDays: '',
         observation: ''
       });
+      setModalSearchText(firstCollab?.name || '');
       setMetrics({ calendarDays: 0, businessDays: 0, holidaysCount: 0 });
     }
     setIsModalOpen(true);
@@ -235,10 +246,10 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === records.length) {
+    if (selectedIds.size === sortedRecords.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(records.map(r => r.id)));
+      setSelectedIds(new Set(sortedRecords.map(r => r.id)));
     }
   };
 
@@ -258,7 +269,17 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     }
   };
 
-  const sortedRecords = [...records].sort((a,b) => b.startDate.localeCompare(a.startDate));
+  const filteredRecords = records.filter(record => {
+    const collab = collaborators.find(c => c.id === record.collaboratorId);
+    const collabName = collab?.name || '';
+    
+    const matchesSearch = collabName.toLowerCase().includes(filters.search.toLowerCase());
+    const matchesCollab = !filters.collaboratorId || record.collaboratorId === filters.collaboratorId;
+    
+    return matchesSearch && matchesCollab;
+  });
+
+  const sortedRecords = [...filteredRecords].sort((a,b) => b.startDate.localeCompare(a.startDate));
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
@@ -296,6 +317,37 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         </div>
       </div>
 
+      <div className="bg-[#161B22] p-6 rounded-[1.5rem] border border-[#30363D] shadow-xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E]">Pesquisar Colaborador</label>
+            <div className="relative">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58]" size={18} />
+              <input 
+                type="text" 
+                placeholder="DIGITE O NOME..." 
+                className="w-full pl-14 pr-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 outline-none font-black text-[11px] uppercase tracking-widest text-white placeholder:text-[#484F58] transition-all"
+                value={filters.search}
+                onChange={e => setFilters({...filters, search: e.target.value})}
+              />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E]">Filtrar por Seleção</label>
+            <select 
+              className="w-full px-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl font-black text-[11px] uppercase text-[#8B949E] outline-none focus:ring-2 focus:ring-[#1F6FEB]/40 transition-all appearance-none cursor-pointer" 
+              value={filters.collaboratorId} 
+              onChange={e => setFilters({...filters, collaboratorId: e.target.value})}
+            >
+              <option value="">Todos os Colaboradores</option>
+              {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-[#161B22] rounded-[2rem] border border-[#30363D] shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
@@ -306,7 +358,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     onClick={toggleSelectAll}
                     className="text-[#30363D] hover:text-[#1F6FEB] transition-colors"
                   >
-                    {selectedIds.size === records.length && records.length > 0 ? (
+                    {selectedIds.size === sortedRecords.length && sortedRecords.length > 0 ? (
                       <CheckSquare size={20} className="text-[#1F6FEB]" />
                     ) : (
                       <Square size={20} />
@@ -443,15 +495,30 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Colaborador Destino</label>
-                      <select 
-                        required
-                        className="w-full px-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none font-black text-xs uppercase text-white appearance-none cursor-pointer"
-                        value={formData.collaboratorId}
-                        onChange={e => setFormData({...formData, collaboratorId: e.target.value})}
-                      >
-                        <option value="">SELECIONE O FUNCIONÁRIO...</option>
-                        {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+                      <div className="relative">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58]" size={18} />
+                        <input 
+                          list="collaborators-list"
+                          required
+                          placeholder="PESQUISAR COLABORADOR..."
+                          className="w-full pl-14 pr-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none font-black text-xs uppercase text-white"
+                          value={modalSearchText}
+                          onChange={e => {
+                            setModalSearchText(e.target.value);
+                            const collab = collaborators.find(c => c.name === e.target.value);
+                            if (collab) {
+                              setFormData({...formData, collaboratorId: collab.id});
+                            } else {
+                              setFormData({...formData, collaboratorId: ''});
+                            }
+                          }}
+                        />
+                        <datalist id="collaborators-list">
+                          {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                            <option key={c.id} value={c.name} />
+                          ))}
+                        </datalist>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Tipo de Solicitação</label>

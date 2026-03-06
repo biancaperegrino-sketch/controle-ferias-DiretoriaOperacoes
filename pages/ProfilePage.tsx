@@ -29,7 +29,8 @@ interface ProfilePageProps {
   logs: AuditLog[];
 }
 
-const ROOT_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
+const ROOT_ADMIN_EMAIL = 'biancaperegrino@gmail.com';
+const CORPORATE_ADMIN_EMAIL = 'bianca.bomfim@fgv.br';
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
   const { user, logo, updateLogo, resetLogo, registeredUsers, addLog } = useAuth();
@@ -46,12 +47,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
   if (!user) return null;
 
   const isAdmin = user.role === UserRole.ADMIN;
-  const isRootAdmin = user.email === ROOT_ADMIN_EMAIL;
+  const isRootAdmin = user.email === ROOT_ADMIN_EMAIL || user.email === CORPORATE_ADMIN_EMAIL;
   const displayLogs = isAdmin ? logs : logs.filter(l => l.userId === user.id);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && isRootAdmin) {
+    if (file && isAdmin) {
       const reader = new FileReader();
       reader.onloadend = () => {
         updateLogo(reader.result as string);
@@ -102,7 +103,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
   };
 
   const handleDeleteUser = async (id: string, name: string, email: string) => {
-    if (email === ROOT_ADMIN_EMAIL) {
+    if (email === ROOT_ADMIN_EMAIL || email === CORPORATE_ADMIN_EMAIL) {
       alert("O administrador raiz não pode ser removido.");
       return;
     }
@@ -223,7 +224,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                             </button>
                             <button 
                               onClick={() => handleDeleteUser(u.id, u.name, u.email)} 
-                              className={`p-2 text-[#484F58] hover:text-rose-500 hover:bg-rose-900/20 rounded-lg transition-all ${u.email === ROOT_ADMIN_EMAIL ? 'opacity-0 pointer-events-none' : ''}`}
+                              className={`p-2 text-[#484F58] hover:text-rose-500 hover:bg-rose-900/20 rounded-lg transition-all ${u.email === ROOT_ADMIN_EMAIL || u.email === CORPORATE_ADMIN_EMAIL ? 'opacity-0 pointer-events-none' : ''}`}
                             >
                               <Trash2 size={14} />
                             </button>
