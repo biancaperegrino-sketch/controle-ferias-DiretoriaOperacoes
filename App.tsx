@@ -3,7 +3,6 @@ import { useState, useEffect, createContext, useContext, Component } from 'react
 import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { 
   onAuthStateChanged, 
-  signInWithPopup,
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -24,7 +23,7 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { ShieldAlert } from 'lucide-react';
-import { auth, db, googleProvider } from './src/lib/firebase';
+import { auth, db } from './src/lib/firebase';
 import { User, UserRole, Collaborator, VacationRecord, Holiday, AuditLog, RegisteredUser } from './types';
 import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
 
@@ -43,8 +42,7 @@ import AuditLogPage from './pages/AuditLogPage';
 import LoginPage from './pages/LoginPage';
 
 const DEFAULT_LOGO = "https://picsum.photos/seed/institutional/400/100";
-const ROOT_ADMIN_EMAIL = "biancaperegrino@gmail.com";
-const CORPORATE_ADMIN_EMAIL = "bianca.bomfim@fgv.br";
+const ROOT_ADMIN_EMAIL = "bianca.bomfim@fgv.br";
 
 enum OperationType {
   CREATE = 'create',
@@ -204,16 +202,11 @@ const App: React.FC = () => {
         const registered = list.find(u => u.email === lowerEmail);
         
         let role = UserRole.VIEWER;
-        if (lowerEmail === ROOT_ADMIN_EMAIL || lowerEmail === CORPORATE_ADMIN_EMAIL) {
+        if (lowerEmail === ROOT_ADMIN_EMAIL) {
           role = UserRole.ADMIN;
         } else if (registered) {
           role = registered.role;
-        } else if (lowerEmail.endsWith('@fgv.br')) {
-          role = UserRole.VIEWER;
         } else {
-          // If not root admin, not registered, and not corporate domain, 
-          // we still allow viewer by default as per current logic, 
-          // but now we've explicitly enabled @fgv.br
           role = UserRole.VIEWER;
         }
 
@@ -240,13 +233,13 @@ const App: React.FC = () => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
       
       // Ensure root admin exists in Firestore if not present
-      const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL || u.email === CORPORATE_ADMIN_EMAIL);
+      const hasRoot = list.find(u => u.email === ROOT_ADMIN_EMAIL);
       if (hasRoot === undefined && user?.role === UserRole.ADMIN) {
         const rootId = 'root-admin';
         setDoc(doc(db, 'registered_users', rootId), {
           id: rootId,
           name: 'BIANCA BOMFIM',
-          email: CORPORATE_ADMIN_EMAIL,
+          email: ROOT_ADMIN_EMAIL,
           role: UserRole.ADMIN,
           addedAt: new Date().toISOString()
         }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'registered_users'));
@@ -365,13 +358,9 @@ const App: React.FC = () => {
     }
   };
 
-  const login = async (email?: string, password?: string) => {
+  const login = async (email: string, password?: string) => {
     try {
-      if (email && password) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithPopup(auth, googleProvider);
-      }
+      await signInWithEmailAndPassword(auth, email, password || '');
       return { success: true };
     } catch (error: any) {
       let message = "Erro ao realizar login.";

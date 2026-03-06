@@ -23,16 +23,6 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    setLoading(true);
-    const result = await login();
-    if (!result.success) {
-      setError(result.message || "Erro ao realizar login com Google.");
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0D1117] p-6 font-sans relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-[#004b8d]/5 rounded-full blur-[120px]"></div>
@@ -92,23 +82,6 @@ const LoginPage: React.FC = () => {
                     Entrar no Sistema <ArrowRight size={16} />
                   </button>
                 </form>
-
-                <div className="relative py-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-[#30363D]"></div>
-                  </div>
-                  <div className="relative flex justify-center text-[8px] font-black uppercase tracking-widest">
-                    <span className="bg-[#161B22] px-4 text-[#484F58]">Ou continue com</span>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={handleGoogleLogin}
-                  className="w-full flex items-center justify-center gap-4 bg-white hover:bg-gray-50 text-gray-900 px-6 py-4 rounded-2xl transition-all shadow-lg active:scale-95 group border border-gray-200"
-                >
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Google</span>
-                </button>
 
                 <div className="pt-8 border-t border-[#30363D] text-center">
                    <div className="inline-flex items-center gap-2 opacity-30">
