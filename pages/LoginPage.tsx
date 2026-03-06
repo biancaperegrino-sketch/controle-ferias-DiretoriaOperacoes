@@ -8,14 +8,27 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     
+    const result = await login(email, password);
+    if (!result.success) {
+      setError(result.message || "Erro ao realizar login.");
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
     const result = await login();
     if (!result.success) {
-      setError(result.message || "Erro ao realizar login com Microsoft.");
+      setError(result.message || "Erro ao realizar login com Google.");
       setLoading(false);
     }
   };
@@ -40,7 +53,7 @@ const LoginPage: React.FC = () => {
 
             {!loading ? (
               <div className="space-y-6">
-                <div className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
                   {error && (
                     <div className="p-4 bg-rose-500/5 border border-rose-500/20 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-1">
                       <ShieldX className="text-rose-500 shrink-0" size={18} />
@@ -48,15 +61,54 @@ const LoginPage: React.FC = () => {
                     </div>
                   )}
 
+                  <div className="space-y-2">
+                    <label className="block text-[8px] font-black uppercase tracking-[0.2em] text-[#8B949E] ml-2">E-mail</label>
+                    <input 
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-[#0D1117] border border-[#30363D] rounded-2xl px-6 py-4 text-white text-xs font-bold focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none transition-all placeholder:text-[#484F58]"
+                      placeholder="seu@email.com"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-[8px] font-black uppercase tracking-[0.2em] text-[#8B949E] ml-2">Senha</label>
+                    <input 
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-[#0D1117] border border-[#30363D] rounded-2xl px-6 py-4 text-white text-xs font-bold focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none transition-all placeholder:text-[#484F58]"
+                      placeholder="••••••••"
+                    />
+                  </div>
+
                   <button 
-                    onClick={handleLogin}
-                    className="w-full flex items-center justify-center gap-4 bg-white hover:bg-gray-50 text-gray-900 px-6 py-4 rounded-2xl transition-all shadow-lg active:scale-95 group border border-gray-200"
+                    type="submit"
+                    className="w-full bg-[#1F6FEB] hover:bg-[#388BFD] text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-3"
                   >
-                    <img src="https://www.svgrepo.com/show/303217/microsoft-logo.svg" alt="Microsoft" className="w-5 h-5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Microsoft</span>
-                    <ArrowRight size={16} className="text-gray-400 group-hover:text-gray-900 transition-colors" />
+                    Entrar no Sistema <ArrowRight size={16} />
                   </button>
+                </form>
+
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[#30363D]"></div>
+                  </div>
+                  <div className="relative flex justify-center text-[8px] font-black uppercase tracking-widest">
+                    <span className="bg-[#161B22] px-4 text-[#484F58]">Ou continue com</span>
+                  </div>
                 </div>
+
+                <button 
+                  onClick={handleGoogleLogin}
+                  className="w-full flex items-center justify-center gap-4 bg-white hover:bg-gray-50 text-gray-900 px-6 py-4 rounded-2xl transition-all shadow-lg active:scale-95 group border border-gray-200"
+                >
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Entrar com Google</span>
+                </button>
 
                 <div className="pt-8 border-t border-[#30363D] text-center">
                    <div className="inline-flex items-center gap-2 opacity-30">

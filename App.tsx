@@ -4,8 +4,13 @@ import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { 
   onAuthStateChanged, 
   signInWithPopup,
-  signOut
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  getAuth
 } from 'firebase/auth';
+import { initializeApp, deleteApp } from 'firebase/app';
+import firebaseConfig from './firebase-applet-config.json';
 import { 
   collection, 
   onSnapshot, 
@@ -139,9 +144,10 @@ class ErrorBoundary extends (React.Component as any) {
 
 interface AuthContextType {
   user: User | null;
-  login: () => Promise<{ success: boolean; message?: string }>;
+  login: (email?: string, password?: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   addLog: (action: string) => Promise<void>;
+  registerUser: (userData: RegisteredUser, password?: string) => Promise<{ success: boolean; message?: string }>;
   isAuthenticated: boolean;
   isAuthReady: boolean;
   logo: string;
@@ -359,12 +365,50 @@ const App: React.FC = () => {
     }
   };
 
-  const login = async () => {
+  const login = async (email?: string, password?: string) => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (email && password) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
       return { success: true };
     } catch (error: any) {
-      return { success: false, message: error.message };
+      let message = "Erro ao realizar login.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        message = "E-mail ou senha incorretos.";
+      }
+      return { success: false, message };
+    }
+  };
+
+  const registerUser = async (userData: RegisteredUser, password?: string) => {
+    if (user?.role !== UserRole.ADMIN) return { success: false, message: "Apenas administradores podem cadastrar usuários." };
+    
+    try {
+      const id = userData.id || Math.random().toString(36).substr(2, 9);
+      const finalData = { ...userData, id };
+      if (password) finalData.password = password;
+      
+      await setDoc(doc(db, 'registered_users', id), finalData);
+
+      if (password) {
+        const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+        const secondaryAuth = getAuth(secondaryApp);
+        try {
+          await createUserWithEmailAndPassword(secondaryAuth, userData.email, password);
+          await signOut(secondaryAuth);
+          await deleteApp(secondaryApp);
+        } catch (e: any) {
+          console.error("Error creating auth user:", e);
+        }
+      }
+
+      addLog(`${userData.id ? 'Editou' : 'Cadastrou'} acesso do usuário ${userData.name}`);
+      return { success: true };
+    } catch (e: any) {
+      console.error("Error registering user:", e);
+      return { success: false, message: e.message };
     }
   };
 
@@ -376,7 +420,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AuthContext.Provider value={{ 
-        user, login, logout, addLog, isAuthenticated: !!user, 
+        user, login, logout, addLog, registerUser, isAuthenticated: !!user, 
         logo, updateLogo, resetLogo, registeredUsers, setRegisteredUsers,
         isAuthReady
       }}>

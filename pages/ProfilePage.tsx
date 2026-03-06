@@ -41,10 +41,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
   const [userFormData, setUserFormData] = useState({
     name: '',
     email: '',
-    role: UserRole.VIEWER
+    role: UserRole.VIEWER,
+    password: ''
   });
 
   if (!user) return null;
+
+  const { registerUser } = useAuth();
 
   const isAdmin = user.role === UserRole.ADMIN;
   const isRootAdmin = user.email === ROOT_ADMIN_EMAIL || user.email === CORPORATE_ADMIN_EMAIL;
@@ -67,14 +70,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
       setUserFormData({
         name: regUser.name,
         email: regUser.email,
-        role: regUser.role
+        role: regUser.role,
+        password: regUser.password || ''
       });
     } else {
       setEditingUser(null);
       setUserFormData({
         name: '',
         email: '',
-        role: UserRole.VIEWER
+        role: UserRole.VIEWER,
+        password: ''
       });
     }
     setIsUserModalOpen(true);
@@ -87,19 +92,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
     
     const userData: RegisteredUser = {
       id,
-      ...userFormData,
+      name: userFormData.name,
       email,
+      role: userFormData.role,
       addedAt: editingUser?.addedAt || new Date().toISOString()
     };
 
-    await setDoc(doc(db, 'registered_users', id), userData);
-
-    if (editingUser) {
-      addLog(`Editou acesso do usuário ${userFormData.name}`);
+    const result = await registerUser(userData, userFormData.password);
+    
+    if (result?.success) {
+      setIsUserModalOpen(false);
     } else {
-      addLog(`Cadastrou novo acesso para ${userFormData.name}`);
+      alert(result?.message || "Erro ao salvar usuário.");
     }
-    setIsUserModalOpen(false);
   };
 
   const handleDeleteUser = async (id: string, name: string, email: string) => {
@@ -351,6 +356,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
                     value={userFormData.email}
                     onChange={e => setUserFormData({...userFormData, email: e.target.value})}
                   />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Senha de Acesso</label>
+                  <div className="relative">
+                    <input 
+                      required={!editingUser}
+                      type="text" 
+                      className="w-full px-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none font-bold text-white transition-all text-xs"
+                      placeholder={editingUser ? "Deixe em branco para manter a atual" : "Defina uma senha"}
+                      value={userFormData.password}
+                      onChange={e => setUserFormData({...userFormData, password: e.target.value})}
+                    />
+                    <Lock className="absolute right-6 top-1/2 -translate-y-1/2 text-[#484F58]" size={16} />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Perfil de Acesso</label>
