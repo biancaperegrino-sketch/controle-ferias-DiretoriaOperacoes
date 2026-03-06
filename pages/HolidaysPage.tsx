@@ -97,7 +97,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
       name: formData.name,
       date: formData.date,
       type: formData.type,
-      state: formData.type === HolidayType.ESTADUAL ? formData.state : undefined
+      ...(formData.type === HolidayType.ESTADUAL ? { state: formData.state } : {})
     };
 
     await setDoc(doc(db, 'holidays', id), finalHoliday);
@@ -293,12 +293,12 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
 
       validRows.forEach(raw => {
         const id = Math.random().toString(36).substr(2, 9);
-        const holidayData = {
+        const holidayData: Holiday = {
           id,
           name: raw.nome,
           date: raw.data,
           type: raw.tipo as HolidayType,
-          state: raw.tipo === HolidayType.ESTADUAL ? raw.estado : undefined
+          ...(raw.tipo === HolidayType.ESTADUAL ? { state: raw.estado } : {})
         };
         ops.push({ type: 'set', ref: doc(db, 'holidays', id), data: holidayData });
       });
