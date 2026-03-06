@@ -15,12 +15,12 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../App';
+import { db } from '../src/lib/firebase';
+import { doc, writeBatch, collection, addDoc, setDoc } from 'firebase/firestore';
 
 interface ImportPageProps {
   collaborators: Collaborator[];
-  setCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
   records: VacationRecord[];
-  setRecords: React.Dispatch<React.SetStateAction<VacationRecord[]>>;
 }
 
 interface RawRecord {
@@ -230,65 +230,90 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
 
   const processImport = async () => {
     if (!isAdmin || !isValidated) return;
-    
     const validRows = rawRecords.filter(r => r.isValid);
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    setColumnMappingError(null);
+    
+    try {
+      const ops: { type: 'set', ref: any, data: any }[] = [];
 
-    const newCollaborators = [...collaborators];
-    const newRecords = [...records];
+      for (const raw of validRows) {
+        // 1. Ensure collaborator exists
+        const collabId = raw.nome.toLowerCase().replace(/\s+/g, '-');
+        const collabRef = doc(db, 'collaborators', collabId);
+        
+        ops.push({
+          type: 'set',
+          ref: collabRef,
+          data: {
+            id: collabId,
+            name: raw.nome,
+            role: raw.funcao || 'Não informada',
+            unit: raw.unidade || 'Não informada',
+            state: (raw.estado || 'SP').toUpperCase().substring(0, 2)
+          }
+        });
 
-    validRows.forEach(raw => {
-      let collab = newCollaborators.find(c => c.name.toLowerCase() === raw.nome.toLowerCase());
-      if (!collab) {
-        collab = {
-          id: Math.random().toString(36).substr(2, 9),
-          name: raw.nome,
-          role: raw.funcao || 'Não informada',
-          unit: raw.unidade || 'Não informada',
-          state: (raw.estado || 'SP').toUpperCase().substring(0, 2)
-        };
-        newCollaborators.push(collab);
+        // 2. Create record
+        const recordId = Math.random().toString(36).substr(2, 9);
+        const recordRef = doc(db, 'records', recordId);
+        const isInitial = raw.tipo === RequestType.SALDO_INICIAL;
+        
+        ops.push({
+          type: 'set',
+          ref: recordRef,
+          data: {
+            id: recordId,
+            collaboratorId: collabId,
+            type: raw.tipo as RequestType,
+            startDate: raw.inicio,
+            endDate: raw.fim,
+            calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
+            businessDays: Math.floor(parseNumber(raw.dias_uteis)),
+            holidaysCount: 0,
+            unit: raw.unidade || 'Não informada',
+            state: (raw.estado || 'SP').toUpperCase().substring(0, 2),
+            observation: raw.observacao || 'Importado via planilha',
+            usuarioCriacao: user?.email || 'Sistema',
+            timestampCriacao: new Date().toISOString()
+          }
+        });
       }
 
-      const isInitial = raw.tipo === RequestType.SALDO_INICIAL;
-      const businessDays = parseNumber(raw.dias_uteis);
+      // Execute batches in chunks of 450
+      const chunkSize = 450;
+      for (let i = 0; i < ops.length; i += chunkSize) {
+        const chunk = ops.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(op => batch.set(op.ref, op.data, { merge: true }));
+        await batch.commit();
+      }
 
-      newRecords.push({
-        id: Math.random().toString(36).substr(2, 9),
-        collaboratorId: collab.id,
-        type: raw.tipo as RequestType,
-        startDate: raw.inicio,
-        endDate: raw.fim,
-        calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
-        businessDays: Math.floor(businessDays),
-        holidaysCount: 0,
-        unit: collab.unit,
-        state: collab.state,
-        observation: raw.observacao
+      const historyId = Math.random().toString(36).substr(2, 9);
+      await setDoc(doc(db, 'import_history', historyId), {
+        id: historyId,
+        date: new Date().toISOString(),
+        userName: user?.name || 'Sistema',
+        fileName: file?.name || 'Arquivo',
+        recordsCount: validRows.length,
+        status: 'Sucesso'
       });
-    });
 
-    setCollaborators(newCollaborators);
-    setRecords(newRecords);
-    
-    saveImportHistory({
-      id: Math.random().toString(36).substr(2, 9),
-      date: new Date().toISOString(),
-      userName: user?.name || 'Sistema',
-      fileName: file?.name || 'Arquivo',
-      recordsCount: validRows.length,
-      status: 'Sucesso'
-    });
-    
-    setIsProcessing(false);
-    setFile(null);
-    setRawRecords([]);
-    setIsValidated(false);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 5000);
+      addLog(`Importou ${validRows.length} registros via planilha.`);
+      
+      setIsProcessing(false);
+      setFile(null);
+      setRawRecords([]);
+      setIsValidated(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+    } catch (err) {
+      console.error("Import execution error:", err);
+      setIsProcessing(false);
+      setColumnMappingError("Erro ao gravar dados no banco. Verifique sua conexão e permissões.");
+    }
   };
 
   return (

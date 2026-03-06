@@ -409,9 +409,7 @@ const App: React.FC = () => {
                             user.role === UserRole.ADMIN ? (
                               <ImportPage 
                                 collaborators={collaborators} 
-                                setCollaborators={setCollaborators}
                                 records={records} 
-                                setRecords={setRecords}
                               />
                             ) : (
                               <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">

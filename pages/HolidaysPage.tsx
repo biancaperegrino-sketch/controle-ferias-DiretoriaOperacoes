@@ -212,7 +212,8 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
 
   const normalizeDate = (dateStr: string) => {
     if (!dateStr) return null;
-    const clean = dateStr.trim();
+    // Remove spaces to handle formats like "2024 - 01 - 01"
+    const clean = dateStr.trim().replace(/\s/g, '');
     if (clean.match(/^\d{4}-\d{2}-\d{2}/)) return clean.substring(0, 10);
     const brMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (brMatch) {
@@ -278,39 +279,61 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     if (validRows.length === 0) return;
 
     setIsProcessing(true);
+    setColumnMappingError(null);
     
-    const batch = writeBatch(db);
+    try {
+      // Chunking strategy for Firestore batches (max 500 ops per batch)
+      const ops: { type: 'set' | 'delete', ref: any, data?: any }[] = [];
 
-    if (replaceExisting) {
-      // Delete all existing holidays first
-      // Note: This is simplified. For large collections, you'd need a more robust way.
-      holidays.forEach(h => {
-        batch.delete(doc(db, 'holidays', h.id));
+      if (replaceExisting) {
+        holidays.forEach(h => {
+          ops.push({ type: 'delete', ref: doc(db, 'holidays', h.id) });
+        });
+      }
+
+      validRows.forEach(raw => {
+        const id = Math.random().toString(36).substr(2, 9);
+        const holidayData = {
+          id,
+          name: raw.nome,
+          date: raw.data,
+          type: raw.tipo as HolidayType,
+          state: raw.tipo === HolidayType.ESTADUAL ? raw.estado : undefined
+        };
+        ops.push({ type: 'set', ref: doc(db, 'holidays', id), data: holidayData });
       });
+
+      // Execute batches in chunks of 450 to be safe
+      const chunkSize = 450;
+      for (let i = 0; i < ops.length; i += chunkSize) {
+        const chunk = ops.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        
+        chunk.forEach(op => {
+          if (op.type === 'delete') {
+            batch.delete(op.ref);
+          } else {
+            batch.set(op.ref, op.data);
+          }
+        });
+        
+        await batch.commit();
+      }
+
+      addLog(`Importou/Atualizou ${validRows.length} feriados via planilha.`);
+      
+      setIsProcessing(false);
+      setFile(null);
+      setRawRecords([]);
+      setIsValidated(false);
+      setIsImportMode(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+    } catch (err) {
+      console.error("Import execution error:", err);
+      setIsProcessing(false);
+      setColumnMappingError("Erro ao gravar dados no banco. Verifique sua conexão e permissões.");
     }
-
-    validRows.forEach(raw => {
-      const id = Math.random().toString(36).substr(2, 9);
-      const holidayData = {
-        id,
-        name: raw.nome,
-        date: raw.data,
-        type: raw.tipo as HolidayType,
-        state: raw.tipo === HolidayType.ESTADUAL ? raw.estado : undefined
-      };
-      batch.set(doc(db, 'holidays', id), holidayData);
-    });
-
-    await batch.commit();
-    addLog(`Importou/Atualizou ${validRows.length} feriados via planilha.`);
-    
-    setIsProcessing(false);
-    setFile(null);
-    setRawRecords([]);
-    setIsValidated(false);
-    setIsImportMode(false);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 5000);
   };
 
   const sortedHolidays = [...holidays].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
