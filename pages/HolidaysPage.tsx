@@ -44,12 +44,12 @@ interface RawHolidayRecord {
 const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
-  const canEdit = user?.role === UserRole.ADMIN;
-  const canDelete = user?.role === UserRole.ADMIN;
+  const canAdd = isAdmin;
+  const canEdit = isAdmin;
+  const canDelete = isAdmin;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isImportMode, setIsImportMode] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -156,12 +156,30 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           
           const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
           
-          if (data.length < 2) {
-            setColumnMappingError("O arquivo parece estar vazio ou sem cabeçalhos.");
+          if (data.length === 0) {
+            setColumnMappingError("O arquivo parece estar vazio.");
             return;
           }
 
-          const headers = (data[0] as any[]).map(h => String(h || '').trim().toLowerCase());
+          // Find header row
+          let headerRowIndex = -1;
+          for (let i = 0; i < Math.min(data.length, 20); i++) {
+            const row = data[i];
+            if (row && Array.isArray(row)) {
+              const rowStr = row.map(c => String(c || '').toLowerCase());
+              if ((rowStr.some(s => s.includes('nome') || s.includes('feriado'))) && 
+                  (rowStr.some(s => s.includes('data') || s.includes('dia')))) {
+                headerRowIndex = i;
+                break;
+              }
+            }
+          }
+
+          if (headerRowIndex === -1) {
+            headerRowIndex = 0; // Fallback to first row
+          }
+
+          const headers = (data[headerRowIndex] as any[]).map(h => String(h || '').trim().toLowerCase());
           
           const getIndex = (possibleNames: string[]) => {
             return headers.findIndex(h => possibleNames.some(p => h.includes(p.toLowerCase())));
@@ -175,21 +193,16 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           };
 
           if (map.nome === -1 || map.data === -1) {
-            setColumnMappingError("Colunas obrigatórias ('Nome' e 'Data') não identificadas automaticamente.");
+            setColumnMappingError("Colunas obrigatórias ('Nome' e 'Data') não identificadas automaticamente. Verifique os cabeçalhos.");
             return;
           }
 
-          const parsed: RawHolidayRecord[] = data.slice(1)
+          const parsed: RawHolidayRecord[] = data.slice(headerRowIndex + 1)
             .filter(row => row && row.length > 0 && row[map.nome])
             .map(row => {
-              let dateVal = row[map.data];
-              if (dateVal instanceof Date) {
-                dateVal = dateVal.toISOString().split('T')[0];
-              }
-
               return {
                 nome: String(row[map.nome] || '').trim(),
-                data: String(dateVal || '').trim(),
+                data: String(row[map.data] || '').trim(),
                 tipo: map.tipo !== -1 ? String(row[map.tipo] || 'Nacional').trim() : 'Nacional',
                 estado: map.estado !== -1 ? String(row[map.estado] || '').trim() : ''
               };
@@ -210,18 +223,33 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     }
   };
 
-  const normalizeDate = (dateStr: string) => {
-    if (!dateStr) return null;
-    // Remove spaces to handle formats like "2024 - 01 - 01"
-    const clean = dateStr.trim().replace(/\s/g, '');
-    if (clean.match(/^\d{4}-\d{2}-\d{2}/)) return clean.substring(0, 10);
-    const brMatch = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const normalizeDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    
+    if (dateVal instanceof Date) {
+      return dateVal.toISOString().split('T')[0];
+    }
+
+    const dateStr = String(dateVal).trim().replace(/\s/g, '');
+    
+    // YYYY-MM-DD
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) return dateStr.substring(0, 10);
+    
+    // DD/MM/YYYY
+    const brMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (brMatch) {
       const d = brMatch[1].padStart(2, '0');
       const m = brMatch[2].padStart(2, '0');
       const y = brMatch[3];
       return `${y}-${m}-${d}`;
     }
+
+    // Excel serial number
+    if (!isNaN(Number(dateStr)) && Number(dateStr) > 30000) {
+      const date = new Date((Number(dateStr) - 25569) * 86400 * 1000);
+      return date.toISOString().split('T')[0];
+    }
+
     return null;
   };
 
@@ -326,7 +354,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
       setFile(null);
       setRawRecords([]);
       setIsValidated(false);
-      setIsImportMode(false);
+      setIsImportModalOpen(false);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 5000);
     } catch (err) {
@@ -350,11 +378,11 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           {canAdd ? (
             <>
               <button 
-                onClick={() => setIsImportMode(!isImportMode)}
-                className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-sm active:scale-95 border ${isImportMode ? 'bg-white text-[#0D1117] border-white' : 'bg-[#161B22] text-[#8B949E] border-[#30363D] hover:text-white hover:bg-[#30363D]'}`}
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-sm active:scale-95 border bg-[#161B22] text-[#8B949E] border-[#30363D] hover:text-white hover:bg-[#30363D]"
               >
                 <FileUp size={16} />
-                {isImportMode ? 'Visualizar Lista' : 'Importar Planilha'}
+                Importar Planilha
               </button>
               <button 
                 onClick={() => handleOpenModal()}
@@ -383,157 +411,174 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
         </div>
       )}
 
-      {isImportMode ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-[#161B22] p-8 rounded-[2.5rem] border border-[#30363D] shadow-xl space-y-10">
-              <div className="space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-[#1F6FEB]/10 text-[#1F6FEB] rounded-2xl flex items-center justify-center border border-[#1F6FEB]/20">
-                    <Download size={20} />
-                  </div>
-                  <h3 className="font-black text-white uppercase tracking-widest text-xs">1. Modelo Estrutural</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        {sortedHolidays.map((holiday) => (
+          <div key={holiday.id} className="bg-[#161B22] p-8 rounded-[2rem] border border-[#30363D] shadow-xl hover:border-[#1F6FEB]/50 transition-all group relative overflow-hidden">
+            {/* Subtle gradient overlay on hover */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#1F6FEB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+            
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-6">
+                <div className="bg-[#0D1117] p-4 rounded-2xl text-[#8B949E] border border-[#30363D] group-hover:text-[#1F6FEB] group-hover:border-[#1F6FEB]/40 transition-all">
+                  <Calendar size={22} />
                 </div>
-                <button onClick={downloadTemplate} className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#0D1117] border border-[#30363D] hover:border-[#1F6FEB] hover:bg-[#1F6FEB]/5 rounded-2xl transition-all font-black text-[#8B949E] hover:text-white text-[10px] uppercase tracking-[0.2em]">
-                  <FileSpreadsheet size={18} />
-                  Baixar Planilha Modelo
-                </button>
+                <div className="flex gap-1">
+                  {canEdit && (
+                    <button onClick={() => handleOpenModal(holiday)} className="p-3 text-[#484F58] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all"><Edit2 size={18} /></button>
+                  )}
+                  {canDelete && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(holiday.id, holiday.name);
+                      }} 
+                      className="p-3 text-[#484F58] hover:text-rose-500 hover:bg-rose-900/20 rounded-xl transition-all"
+                      title="Excluir Feriado"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                  {!canEdit && !canDelete && (
+                    <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest mt-3">Consulta</span>
+                  )}
+                </div>
               </div>
-
-              <div className="space-y-8">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-[#30363D] text-white rounded-2xl flex items-center justify-center shadow-lg">
-                    <FileUp size={20} />
-                  </div>
-                  <h3 className="font-black text-white uppercase tracking-widest text-xs">2. Upload de Dados</h3>
-                </div>
-                
-                <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-[2.5rem] p-10 text-center cursor-pointer bg-[#0D1117] border-[#30363D] hover:border-[#1F6FEB] hover:bg-[#1F6FEB]/5 transition-all group">
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx" onChange={handleFileChange} />
-                  <div className="space-y-4">
-                    <div className="mx-auto h-16 w-16 rounded-3xl flex items-center justify-center bg-[#161B22] border border-[#30363D] text-[#484F58] group-hover:text-[#1F6FEB] group-hover:border-[#1F6FEB]/40 transition-all">
-                      <FileUp size={28} />
-                    </div>
-                    <p className="font-black text-[#8B949E] text-xs uppercase tracking-widest truncate">{file ? file.name : 'SELECIONAR ARQUIVO'}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <label className="flex items-center gap-4 p-5 bg-[#0D1117] rounded-3xl border border-[#30363D] cursor-pointer group">
-                    <input type="checkbox" checked={replaceExisting} onChange={e => setReplaceExisting(e.target.checked)} className="h-5 w-5 rounded border-[#30363D] bg-[#161B22] text-[#1F6FEB] focus:ring-[#1F6FEB]" />
-                    <span className="text-[10px] font-black text-[#8B949E] uppercase tracking-widest group-hover:text-white transition-colors">Substituir calendário atual</span>
-                  </label>
-                  <div className="flex gap-4">
-                    <button onClick={validateData} disabled={!file || isProcessing} className="flex-1 py-4 bg-[#0D1117] text-[#8B949E] border border-[#30363D] rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#30363D] hover:text-white transition-all">Validar</button>
-                    <button onClick={processImport} disabled={!isValidated || isProcessing} className="flex-1 py-4 bg-[#1F6FEB] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#388BFD] transition-all shadow-lg shadow-blue-500/20">Importar</button>
-                  </div>
-                </div>
+              <h4 className="font-black text-white mb-2 leading-tight uppercase tracking-tight text-lg">{holiday.name}</h4>
+              <p className="text-[#8B949E] font-black tabular-nums text-sm mb-6 uppercase tracking-wider">{formatDate(holiday.date)}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {holiday.type === HolidayType.NACIONAL && (
+                  <span className="bg-blue-900/40 text-[#1F6FEB] px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border border-[#1F6FEB]/30">Nacional</span>
+                )}
+                {holiday.type === HolidayType.ESTADUAL && (
+                  <span className="bg-amber-900/40 text-amber-500 px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border border-amber-500/30">Estadual ({holiday.state})</span>
+                )}
               </div>
             </div>
           </div>
-
-          <div className="lg:col-span-2">
-            <div className="bg-[#161B22] rounded-[2.5rem] border border-[#30363D] shadow-xl overflow-hidden h-full flex flex-col">
-              <div className="px-10 py-6 border-b border-[#30363D] bg-[#0D1117]/50 flex items-center justify-between">
-                <h4 className="font-black text-white uppercase tracking-[0.2em] text-[10px]">Diagnóstico de Importação</h4>
-                {isValidated && <span className="text-[10px] font-black uppercase text-emerald-500">{rawRecords.length} REGISTROS</span>}
-              </div>
-              <div className="flex-1 overflow-auto max-h-[600px]">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead className="bg-[#0D1117] sticky top-0 z-10 text-[10px] font-black uppercase text-[#8B949E] tracking-[0.2em]">
-                    <tr>
-                      <th className="px-8 py-5">Status</th>
-                      <th className="px-8 py-5">Nome do Feriado</th>
-                      <th className="px-8 py-5">Data</th>
-                      <th className="px-8 py-5">Âmbito / Localização</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#30363D]">
-                    {rawRecords.map((record, i) => (
-                      <tr key={i} className={`hover:bg-[#1F6FEB]/5 transition-colors ${!record.isValid && isValidated ? 'bg-rose-950/20' : ''}`}>
-                        <td className="px-8 py-5">
-                          {record.isValid ? <CheckCircle2 size={18} className="text-emerald-500" /> : <AlertCircle size={18} className="text-rose-500" />}
-                        </td>
-                        <td className="px-8 py-5 font-bold text-white uppercase tracking-tight">{record.nome}</td>
-                        <td className="px-8 py-5 font-bold text-[#8B949E] tabular-nums text-xs uppercase">{record.data}</td>
-                        <td className="px-8 py-5">
-                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black uppercase text-[#8B949E]">{record.tipo}</span>
-                            {record.estado && <span className="bg-[#0D1117] text-[#8B949E] px-1.5 py-0.5 rounded text-[9px] font-black border border-[#30363D]">{record.estado}</span>}
-                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {rawRecords.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-8 py-32 text-center">
-                          <div className="flex flex-col items-center gap-4 opacity-20">
-                            <FileSpreadsheet size={64} className="text-[#8B949E]" />
-                            <p className="font-black uppercase tracking-[0.3em] text-[10px]">Aguardando carregamento da planilha</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        ))}
+        {sortedHolidays.length === 0 && (
+          <div className="col-span-full py-32 bg-[#161B22] border-2 border-dashed border-[#30363D] rounded-[3rem] text-center flex flex-col items-center justify-center gap-6 opacity-30">
+             <Calendar size={64} />
+             <p className="font-black uppercase tracking-[0.3em] text-xs">Calendário não configurado</p>
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {sortedHolidays.map((holiday) => (
-            <div key={holiday.id} className="bg-[#161B22] p-8 rounded-[2rem] border border-[#30363D] shadow-xl hover:border-[#1F6FEB]/50 transition-all group relative overflow-hidden">
-              {/* Subtle gradient overlay on hover */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#1F6FEB]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-              
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="bg-[#0D1117] p-4 rounded-2xl text-[#8B949E] border border-[#30363D] group-hover:text-[#1F6FEB] group-hover:border-[#1F6FEB]/40 transition-all">
-                    <Calendar size={22} />
-                  </div>
-                  <div className="flex gap-1">
-                    {canEdit && (
-                      <button onClick={() => handleOpenModal(holiday)} className="p-3 text-[#484F58] hover:text-[#1F6FEB] hover:bg-[#30363D] rounded-xl transition-all"><Edit2 size={18} /></button>
-                    )}
-                    {canDelete && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(holiday.id, holiday.name);
-                        }} 
-                        className="p-3 text-[#484F58] hover:text-rose-500 hover:bg-rose-900/20 rounded-xl transition-all"
-                        title="Excluir Feriado"
-                      >
-                        <Trash2 size={18} />
+        )}
+      </div>
+
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-[#161B22] w-full max-w-6xl h-[90vh] rounded-[3rem] shadow-2xl border border-[#30363D] overflow-hidden flex flex-col">
+            <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 bg-[#1F6FEB] rounded-2xl flex items-center justify-center text-white">
+                  <FileUp size={24} />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-lg uppercase tracking-tight">Importação de Feriados</h3>
+                  <p className="text-[#8B949E] text-[10px] font-black uppercase tracking-widest">Carregamento massivo via planilha Excel/CSV</p>
+                </div>
+              </div>
+              <button onClick={() => setIsImportModalOpen(false)} className="h-10 w-10 bg-[#30363D] hover:bg-[#484F58] rounded-full flex items-center justify-center text-white"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-hidden p-10">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 h-full">
+                <div className="lg:col-span-1 space-y-8 overflow-y-auto pr-4 custom-scrollbar">
+                  <div className="bg-[#0D1117] p-8 rounded-[2rem] border border-[#30363D] space-y-8">
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black text-[#1F6FEB] uppercase tracking-[0.2em]">1. Preparação</h4>
+                      <button onClick={downloadTemplate} className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#161B22] border border-[#30363D] hover:border-[#1F6FEB] rounded-2xl transition-all font-black text-[#8B949E] hover:text-white text-[10px] uppercase tracking-widest">
+                        <FileSpreadsheet size={18} />
+                        Baixar Modelo
                       </button>
-                    )}
-                    {!canEdit && !canDelete && (
-                      <span className="text-[9px] font-black uppercase text-[#484F58] tracking-widest mt-3">Consulta</span>
-                    )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black text-[#1F6FEB] uppercase tracking-[0.2em]">2. Seleção de Arquivo</h4>
+                      <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-[2rem] p-8 text-center cursor-pointer bg-[#161B22] border-[#30363D] hover:border-[#1F6FEB] transition-all group">
+                        <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xlsx" onChange={handleFileChange} />
+                        <div className="space-y-3">
+                          <FileUp size={24} className="mx-auto text-[#484F58] group-hover:text-[#1F6FEB]" />
+                          <p className="font-black text-[#8B949E] text-[10px] uppercase tracking-widest truncate">{file ? file.name : 'Clique para selecionar'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black text-[#1F6FEB] uppercase tracking-[0.2em]">3. Configurações</h4>
+                      <label className="flex items-center gap-4 p-4 bg-[#161B22] rounded-2xl border border-[#30363D] cursor-pointer group">
+                        <input type="checkbox" checked={replaceExisting} onChange={e => setReplaceExisting(e.target.checked)} className="h-5 w-5 rounded border-[#30363D] bg-[#0D1117] text-[#1F6FEB] focus:ring-[#1F6FEB]" />
+                        <span className="text-[9px] font-black text-[#8B949E] uppercase tracking-widest group-hover:text-white transition-colors">Substituir calendário atual</span>
+                      </label>
+                    </div>
+
+                    <div className="pt-4 space-y-4">
+                      {columnMappingError && (
+                        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-3">
+                          <AlertCircle className="text-rose-500 shrink-0" size={16} />
+                          <p className="text-rose-500 text-[9px] font-bold uppercase leading-relaxed">{columnMappingError}</p>
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-3">
+                        <button onClick={validateData} disabled={!file || isProcessing} className="w-full py-4 bg-[#1F6FEB] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#388BFD] transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50">Validar Dados</button>
+                        <button onClick={processImport} disabled={!isValidated || isProcessing} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50">Confirmar Importação</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <h4 className="font-black text-white mb-2 leading-tight uppercase tracking-tight text-lg">{holiday.name}</h4>
-                <p className="text-[#8B949E] font-black tabular-nums text-sm mb-6 uppercase tracking-wider">{formatDate(holiday.date)}</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {holiday.type === HolidayType.NACIONAL && (
-                    <span className="bg-blue-900/40 text-[#1F6FEB] px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border border-[#1F6FEB]/30">Nacional</span>
-                  )}
-                  {holiday.type === HolidayType.ESTADUAL && (
-                    <span className="bg-amber-900/40 text-amber-500 px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border border-amber-500/30">Estadual ({holiday.state})</span>
-                  )}
+
+                <div className="lg:col-span-2 flex flex-col h-full overflow-hidden">
+                  <div className="bg-[#0D1117] rounded-[2rem] border border-[#30363D] flex-1 flex flex-col overflow-hidden shadow-inner">
+                    <div className="px-8 py-5 border-b border-[#30363D] flex items-center justify-between">
+                      <h4 className="font-black text-white uppercase tracking-widest text-[10px]">Pré-visualização dos Dados</h4>
+                      {isValidated && <span className="text-[10px] font-black uppercase text-emerald-500">{rawRecords.length} REGISTROS</span>}
+                    </div>
+                    <div className="flex-1 overflow-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#161B22] sticky top-0 z-10 text-[9px] font-black uppercase text-[#8B949E] tracking-widest">
+                          <tr>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4">Feriado</th>
+                            <th className="px-6 py-4">Data</th>
+                            <th className="px-6 py-4">Âmbito</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#30363D]">
+                          {rawRecords.map((record, i) => (
+                            <tr key={i} className={`hover:bg-[#1F6FEB]/5 transition-colors ${!record.isValid && isValidated ? 'bg-rose-950/10' : ''}`}>
+                              <td className="px-6 py-4">
+                                {record.isValid ? <CheckCircle2 size={16} className="text-emerald-500" /> : <AlertCircle size={16} className="text-rose-500" />}
+                              </td>
+                              <td className="px-6 py-4 font-bold text-white uppercase">{record.nome}</td>
+                              <td className="px-6 py-4 font-bold text-[#8B949E] tabular-nums">{record.data}</td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] font-black uppercase text-[#8B949E]">{record.tipo}</span>
+                                  {record.estado && <span className="bg-[#161B22] text-[#8B949E] px-1.5 py-0.5 rounded text-[8px] font-black border border-[#30363D]">{record.estado}</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          {rawRecords.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="px-8 py-32 text-center">
+                                <div className="flex flex-col items-center gap-4 opacity-20">
+                                  <FileSpreadsheet size={48} className="text-[#8B949E]" />
+                                  <p className="font-black uppercase tracking-widest text-[9px]">Aguardando arquivo</p>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          ))}
-          {sortedHolidays.length === 0 && (
-            <div className="col-span-full py-32 bg-[#161B22] border-2 border-dashed border-[#30363D] rounded-[3rem] text-center flex flex-col items-center justify-center gap-6 opacity-30">
-               <Calendar size={64} />
-               <p className="font-black uppercase tracking-[0.3em] text-xs">Calendário não configurado</p>
-            </div>
-          )}
+          </div>
         </div>
       )}
+
 
       {(canAdd || canEdit) && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">

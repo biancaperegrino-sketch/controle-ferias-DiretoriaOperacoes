@@ -35,7 +35,7 @@ interface VacationsPageProps {
 const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canCreate = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
+  const canCreate = isAdmin;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VacationRecord | null>(null);

@@ -17,9 +17,9 @@ interface CollaboratorsPageProps {
 const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
-  const canAdd = user?.role === UserRole.ADMIN || user?.role === UserRole.COMMON;
-  const canEdit = user?.role === UserRole.ADMIN;
-  const canDelete = user?.role === UserRole.ADMIN;
+  const canAdd = isAdmin;
+  const canEdit = isAdmin;
+  const canDelete = isAdmin;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCollaborator, setEditingCollaborator] = useState<Collaborator | null>(null);
