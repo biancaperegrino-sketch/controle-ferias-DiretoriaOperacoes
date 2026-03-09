@@ -368,12 +368,7 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Calendário Operacional</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Gestão de Feriados Nacionais, Estaduais e Municipais</p>
-        </div>
-        
+      <header className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         <div className="flex flex-wrap items-center gap-3">
           {canAdd ? (
             <>

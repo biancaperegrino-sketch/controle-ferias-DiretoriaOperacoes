@@ -64,8 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 </div>
               )}
               <div>
-                <h1 className="text-lg font-black text-white uppercase tracking-tighter leading-none">Diretoria de Operações</h1>
-                <p className="text-[9px] font-black text-[#8B949E] uppercase tracking-widest mt-1">Saldos de Férias</p>
+                <h1 className="text-lg font-black text-white uppercase tracking-tighter leading-none">Saldo de Férias</h1>
               </div>
             </div>
             <button onClick={onClose} className="md:hidden text-[#8B949E] hover:text-white">

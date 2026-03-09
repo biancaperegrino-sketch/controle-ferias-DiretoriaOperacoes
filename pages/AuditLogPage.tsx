@@ -29,11 +29,7 @@ const AuditLogPage: React.FC<AuditLogPageProps> = ({ logs }) => {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Log de Auditoria</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Rastreabilidade completa de ações no sistema</p>
-        </div>
+      <header className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         <div className="bg-amber-950/20 text-amber-500 px-6 py-3 rounded-2xl border border-amber-500/30 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-3">
           <ShieldCheck size={18} />
           Governança Ativa

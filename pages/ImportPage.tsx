@@ -1,6 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Collaborator, VacationRecord, RequestType, ImportHistory, UserRole } from '../types';
+import { Collaborator, VacationRecord, RequestType, ImportHistory, UserRole, Holiday } from '../types';
+import { calculateVacationMetrics } from '../utils/dateUtils';
 import { 
   FileUp, 
   Download, 
@@ -21,6 +22,7 @@ import { doc, writeBatch, collection, addDoc, setDoc } from 'firebase/firestore'
 interface ImportPageProps {
   collaborators: Collaborator[];
   records: VacationRecord[];
+  holidays: Holiday[];
 }
 
 interface RawRecord {
@@ -38,7 +40,7 @@ interface RawRecord {
   errors?: string[];
 }
 
-const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators, records, setRecords }) => {
+const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holidays }) => {
   const { user, addLog } = useAuth();
   const isAdmin = user?.role === UserRole.ADMIN;
   
@@ -107,16 +109,16 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
     };
 
     const map = {
-      unidade: getIndex(['unidade', 'local', 'centro']),
-      funcao: getIndex(['função', 'funcao', 'cargo', 'ocupação']),
-      estado: getIndex(['estado', 'uf', 'região']),
-      nome: getIndex(['nome', 'colaborador', 'funcionario', 'pessoal']),
-      inicio: getIndex(['início', 'inicio', 'data de início', 'data inicial', 'periodo inicio']),
-      fim: getIndex(['fim', 'final', 'data de fim', 'data final', 'periodo fim']),
-      tipo: getIndex(['tipo', 'solicitação', 'solicitacao', 'evento', 'descrição']),
-      dias_corridos: getIndex(['corridos', 'total dias']),
-      dias_uteis: getIndex(['úteis', 'uteis', 'dias', 'líquido', 'liquido']),
-      observacao: getIndex(['observação', 'observacao', 'obs', 'comentário'])
+      unidade: getIndex(['unidade', 'local', 'centro', 'unit', 'filial']),
+      funcao: getIndex(['função', 'funcao', 'cargo', 'ocupação', 'role', 'position']),
+      estado: getIndex(['estado', 'uf', 'região', 'state']),
+      nome: getIndex(['nome', 'colaborador', 'funcionario', 'pessoal', 'name', 'employee']),
+      inicio: getIndex(['início', 'inicio', 'data de início', 'data inicial', 'periodo inicio', 'start']),
+      fim: getIndex(['fim', 'final', 'data de fim', 'data final', 'periodo fim', 'end']),
+      tipo: getIndex(['tipo', 'solicitação', 'solicitacao', 'evento', 'descrição', 'type', 'request']),
+      dias_corridos: getIndex(['corridos', 'total dias', 'calendar']),
+      dias_uteis: getIndex(['úteis', 'uteis', 'dias', 'líquido', 'liquido', 'business', 'working']),
+      observacao: getIndex(['observação', 'observacao', 'obs', 'comentário', 'note', 'observation'])
     };
 
     if (map.nome === -1) {
@@ -209,13 +211,24 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
           errors.push(`Tipo desconhecido: "${record.tipo}"`);
         }
 
+        // Recalculate metrics based on system rules if not SALDO_INICIAL
+        let calculatedMetrics = { calendarDays: 0, businessDays: 0, holidaysCount: 0 };
+        if (matchedType === RequestType.SALDO_INICIAL) {
+          calculatedMetrics.businessDays = Math.floor(parseNumber(record.dias_uteis));
+        } else if (finalStart && finalEnd) {
+          calculatedMetrics = calculateVacationMetrics(finalStart, finalEnd, (record.estado || 'SP').toUpperCase().substring(0, 2), holidays);
+        }
+
         return { 
           ...record, 
           isValid: errors.length === 0, 
           errors,
           inicio: finalStart,
           fim: finalEnd,
-          tipo: matchedType || record.tipo
+          tipo: matchedType || record.tipo,
+          dias_corridos: calculatedMetrics.calendarDays.toString(),
+          dias_uteis: calculatedMetrics.businessDays.toString(),
+          holidaysCount: calculatedMetrics.holidaysCount
         };
       });
       
@@ -272,7 +285,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
             endDate: raw.fim,
             calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
             businessDays: Math.floor(parseNumber(raw.dias_uteis)),
-            holidaysCount: 0,
+            holidaysCount: raw.holidaysCount || 0,
             unit: raw.unidade || 'Não informada',
             state: (raw.estado || 'SP').toUpperCase().substring(0, 2),
             observation: raw.observacao || 'Importado via planilha',
@@ -318,11 +331,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Módulo de Importação</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Migração Massiva de Registros Históricos (Suporte até 1000+ linhas)</p>
-        </div>
+      <header className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         {!isAdmin && (
           <div className="bg-amber-950/20 text-amber-500 px-6 py-3 rounded-2xl border border-amber-500/30 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-3">
             <ShieldAlert size={18} />
@@ -420,7 +429,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
                     <th className="px-8 py-5">Status</th>
                     <th className="px-8 py-5">Colaborador Identificado</th>
                     <th className="px-8 py-5">Evento</th>
-                    <th className="px-8 py-5 text-right">Valor Líquido</th>
+                    <th className="px-8 py-5 text-right">Dias (C/U)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
@@ -439,7 +448,12 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, setCollaborators
                          <span className="text-[9px] font-black uppercase text-[#8B949E] tracking-widest">{record.tipo}</span>
                       </td>
                       <td className="px-8 py-5 font-black text-right text-white tabular-nums">
-                        {record.dias_uteis}
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="text-white">{record.dias_uteis}U</span>
+                          <span className="text-[9px] text-[#8B949E] font-bold uppercase tracking-tighter">
+                            {record.dias_corridos}C
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ))}

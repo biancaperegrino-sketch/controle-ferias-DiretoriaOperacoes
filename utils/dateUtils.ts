@@ -31,6 +31,10 @@ export const calculateVacationMetrics = (
   state: string,
   holidays: Holiday[]
 ) => {
+  if (!startDate || !endDate) {
+    return { calendarDays: 0, businessDays: 0, holidaysCount: 0 };
+  }
+
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
   
@@ -39,16 +43,20 @@ export const calculateVacationMetrics = (
   }
 
   // Calendar days: inclusive
+  // Fórmula: dias_corridos = (data_fim - data_inicio) + 1
   const calendarDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
   // Get holidays in range
   const holidaysInRange = getHolidaysInRange(start, end, holidays, state);
   
   // Business days: exclude weekends and holidays
+  // Excluir da contagem: sábados, domingos, feriados nacionais, feriados estaduais do estado do colaborador
   let businessDays = 0;
   const current = new Date(start);
   while (current <= end) {
-    const isHoliday = holidaysInRange.some(h => h.date === current.toISOString().split('T')[0]);
+    const dateStr = current.toISOString().split('T')[0];
+    const isHoliday = holidaysInRange.some(h => h.date === dateStr);
+    
     if (!isWeekend(current) && !isHoliday) {
       businessDays++;
     }

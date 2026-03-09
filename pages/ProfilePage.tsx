@@ -118,16 +118,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ logs }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">
-            {isAdmin ? 'Configurações Globais' : 'Perfil do Usuário'}
-          </h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">
-            {isAdmin ? 'Controle de Governança e Branding' : 'Informações da Conta Microsoft'}
-          </p>
-        </div>
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+      <header className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl border text-[10px] font-black uppercase tracking-[0.2em] shadow-lg ${isAdmin ? 'bg-amber-950/20 text-amber-500 border-amber-500/30' : 'bg-blue-900/20 text-[#1F6FEB] border-[#1F6FEB]/30'}`}>
           <ShieldCheck size={20} />
           {isAdmin ? 'Permissão Total' : 'Acesso Padrão'}

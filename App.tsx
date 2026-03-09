@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect, createContext, useContext, Component } from 'react';
+import { useState, useEffect, createContext, useContext, Component, useMemo } from 'react';
 import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { 
   onAuthStateChanged, 
@@ -24,7 +24,8 @@ import {
 } from 'firebase/firestore';
 import { ShieldAlert } from 'lucide-react';
 import { auth, db } from './src/lib/firebase';
-import { User, UserRole, Collaborator, VacationRecord, Holiday, AuditLog, RegisteredUser } from './types';
+import { User, UserRole, Collaborator, VacationRecord, Holiday, AuditLog, RegisteredUser, RequestType } from './types';
+import { calculateVacationMetrics } from './utils/dateUtils';
 import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './constants';
 
 // Components
@@ -172,6 +173,31 @@ const App: React.FC = () => {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [records, setRecords] = useState<VacationRecord[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+
+  // Recalculate metrics in real-time for all records based on current holidays
+  const processedRecords = useMemo(() => {
+    return records.map(record => {
+      // Saldo Inicial and Abono Pecuniário (if implemented similarly) might have manual days
+      // For now, we only skip recalculation for SALDO_INICIAL
+      if (record.type === RequestType.SALDO_INICIAL) return record;
+      
+      const metrics = calculateVacationMetrics(record.startDate, record.endDate, record.state, holidays);
+      
+      // Only update if metrics actually changed to avoid unnecessary re-renders
+      if (metrics.calendarDays === record.calendarDays && 
+          metrics.businessDays === record.businessDays && 
+          metrics.holidaysCount === record.holidaysCount) {
+        return record;
+      }
+
+      return {
+        ...record,
+        calendarDays: metrics.calendarDays,
+        businessDays: metrics.businessDays,
+        holidaysCount: metrics.holidaysCount
+      };
+    });
+  }, [records, holidays]);
   const [isSyncing, setIsSyncing] = useState(true);
   const [showSyncToast, setShowSyncToast] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -430,25 +456,26 @@ const App: React.FC = () => {
                     <main className="flex-1 flex flex-col md:ml-72">
                       <Header onMenuClick={() => setSidebarOpen(true)} />
                       <div className="p-4 md:p-8 flex-1">
-                        <div className="max-w-7xl mx-auto w-full h-full">
+                        <div className="w-full h-full">
                           <Routes>
-                          <Route path="/" element={<Dashboard collaborators={collaborators} records={records} holidays={holidays} />} />
-                          <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={records} />} />
+                          <Route path="/" element={<Dashboard collaborators={collaborators} records={processedRecords} holidays={holidays} />} />
+                          <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={processedRecords} />} />
                           <Route path="/collaborators" element={<CollaboratorsPage collaborators={collaborators} />} />
                           <Route path="/vacations" element={
                             <VacationsPage 
-                              records={records} 
+                              records={processedRecords} 
                               collaborators={collaborators} 
                               holidays={holidays} 
                             />
                           } />
                           <Route path="/holidays" element={<HolidaysPage holidays={holidays} />} />
-                          <Route path="/report" element={<IndividualReport collaborators={collaborators} records={records} />} />
+                          <Route path="/report" element={<IndividualReport collaborators={collaborators} records={processedRecords} />} />
                           <Route path="/import" element={
                             user.role === UserRole.ADMIN ? (
                               <ImportPage 
                                 collaborators={collaborators} 
-                                records={records} 
+                                records={processedRecords} 
+                                holidays={holidays}
                               />
                             ) : (
                               <div className="p-20 text-center space-y-6 bg-[#161B22] rounded-[3rem] border border-dashed border-[#30363D]">

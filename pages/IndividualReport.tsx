@@ -47,11 +47,6 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <header>
-        <h2 className="text-3xl font-black text-white tracking-tight uppercase">Dossiê Individual</h2>
-        <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Auditoria de Saldo Disponível</p>
-      </header>
-
       <div className="bg-[#161B22] p-8 rounded-[2.5rem] border border-[#30363D] shadow-xl">
         <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-4">Selecionar Colaborador</label>
         <div className="relative max-w-xl">
@@ -119,7 +114,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                   <tr>
                     <th className="px-10 py-5">Categoria</th>
                     <th className="px-10 py-5">Evento</th>
-                    <th className="px-10 py-5 text-right">Impacto Real</th>
+                    <th className="px-10 py-5 text-right">Dias (C/U/F)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#30363D]">
@@ -136,8 +131,17 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                       <td className="px-10 py-6 text-[#8B949E] font-bold text-xs uppercase tabular-nums">
                         {record.type === RequestType.SALDO_INICIAL && record.startDate === record.endDate ? '-' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
                       </td>
-                      <td className={`px-10 py-6 text-right font-black text-base tabular-nums ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
-                        {record.type === RequestType.DESCONTO ? '-' : ''}{record.businessDays}
+                      <td className="px-10 py-6 text-right tabular-nums">
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
+                            {record.type === RequestType.DESCONTO ? '-' : ''}{record.businessDays}U
+                          </span>
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-[#8B949E] uppercase tracking-widest">
+                            <span>{record.calendarDays}C</span>
+                            <span className="opacity-30">|</span>
+                            <span>{record.holidaysCount}F</span>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -108,12 +108,7 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborators, records, holidays 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Quadro Geral de Férias</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Gerenciamento centralizado de solicitações e saldos de férias.</p>
-        </div>
-        
+      <header className="flex flex-col xl:flex-row xl:items-center justify-end gap-6">
         <div className="flex flex-wrap items-center gap-3">
           {isAdmin && (
             <>
@@ -231,10 +226,12 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborators, records, holidays 
                     </div>
                   </td>
                   <td className="px-8 py-6 text-center">
-                    <div className="flex items-center justify-center gap-3 font-black tabular-nums">
-                      <span className="text-white">{row.calendarDays}</span>
-                      <span className="text-[#1F6FEB]">{row.businessDays}</span>
-                      <span className="text-amber-500">{row.holidaysCount}</span>
+                    <div className="flex items-center justify-center gap-2 font-black tabular-nums text-[11px] uppercase tracking-tighter">
+                      <span className="text-white" title="Dias Corridos">{row.calendarDays}C</span>
+                      <span className="text-[#30363D]">/</span>
+                      <span className="text-[#1F6FEB]" title="Dias Úteis">{row.businessDays}U</span>
+                      <span className="text-[#30363D]">/</span>
+                      <span className="text-amber-500" title="Feriados">{row.holidaysCount}F</span>
                     </div>
                   </td>
                   <td className="px-8 py-6 text-center">

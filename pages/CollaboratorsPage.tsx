@@ -88,11 +88,7 @@ const CollaboratorsPage: React.FC<CollaboratorsPageProps> = ({ collaborators }) 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Base de Colaboradores</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Gestão do Quadro de Operações</p>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         {canAdd ? (
           <button 
             onClick={() => handleOpenModal()}

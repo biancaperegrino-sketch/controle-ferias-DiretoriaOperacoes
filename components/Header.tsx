@@ -1,13 +1,43 @@
 import React from 'react';
 import { useAuth } from '../App';
-import { LogOut, User, Bell, Search, Menu } from 'lucide-react';
+import { LogOut, User, Bell, Menu } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
-  const { user, logout, logo } = useAuth();
+  const { user, logout } = useAuth();
+  const location = useLocation();
+
+  const getPageTitle = () => {
+    const path = location.pathname;
+    if (path === '/') return 'Quadro Geral';
+    if (path === '/analytics') return 'Analytics';
+    if (path === '/collaborators') return 'Colaboradores';
+    if (path === '/vacations') return 'Lançamentos';
+    if (path === '/holidays') return 'Feriados';
+    if (path === '/report') return 'Dossiê';
+    if (path === '/import') return 'Importação';
+    if (path === '/profile') return 'Configurações';
+    if (path === '/audit') return 'Auditoria';
+    return '';
+  };
+
+  const getPageSubtitle = () => {
+    const path = location.pathname;
+    if (path === '/') return 'Controle centralizado de saldos e dias úteis de férias de toda a diretoria';
+    if (path === '/analytics') return 'Análise estatística e visualização de tendências de utilização de férias';
+    if (path === '/collaborators') return 'Gestão completa do cadastro, cargos e unidades dos colaboradores';
+    if (path === '/vacations') return 'Registro, agendamento e acompanhamento de períodos de férias e abonos';
+    if (path === '/holidays') return 'Manutenção do calendário de feriados para cálculos automáticos de dias úteis';
+    if (path === '/report') return 'Relatório individual detalhado e timeline de lançamentos por colaborador';
+    if (path === '/import') return 'Processamento de carga de dados em massa através de planilhas CSV';
+    if (path === '/profile') return 'Gerenciamento de informações de perfil e configurações de acesso';
+    if (path === '/audit') return 'Rastreabilidade completa de todas as alterações realizadas no sistema';
+    return '';
+  };
 
   return (
     <header className="h-24 bg-[#0D1117]/80 backdrop-blur-xl border-b border-[#30363D] flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
@@ -18,13 +48,13 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         >
           <Menu size={24} />
         </button>
-        <div className="relative w-full max-w-md group hidden sm:block">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58] group-focus-within:text-[#1F6FEB] transition-colors" size={18} />
-          <input 
-            type="text" 
-            placeholder="PESQUISAR NO SISTEMA..." 
-            className="w-full pl-14 pr-6 py-3 bg-[#161B22] border border-[#30363D] rounded-xl focus:ring-2 focus:ring-[#1F6FEB]/40 outline-none font-black text-[10px] uppercase tracking-[0.2em] text-white placeholder:text-[#484F58] transition-all"
-          />
+        <div className="flex flex-col">
+          <h1 className="text-xl font-black text-white uppercase tracking-tight leading-none">
+            {getPageTitle()}
+          </h1>
+          <p className="text-[10px] font-black text-[#8B949E] uppercase tracking-widest mt-2 opacity-70">
+            {getPageSubtitle()}
+          </p>
         </div>
       </div>
 

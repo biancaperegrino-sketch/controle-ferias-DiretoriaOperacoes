@@ -283,12 +283,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tight uppercase">Gestão Operacional</h2>
-          <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Histórico de Lançamentos de Férias</p>
-        </div>
-        
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-6">
         <div className="flex flex-wrap items-center gap-3">
           {selectedIds.size > 0 && isAdmin && (
             <button 
@@ -368,7 +363,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                 <th className="px-4 py-5">Colaborador</th>
                 <th className="px-8 py-5">Categoria</th>
                 <th className="px-8 py-5">Período</th>
-                <th className="px-8 py-5 text-center">Dias Úteis</th>
+                <th className="px-8 py-5 text-center">Dias (C/U/F)</th>
                 <th className="px-8 py-5 text-center">Doc</th>
                 {isAdmin && <th className="px-8 py-5 text-right">Gestão</th>}
               </tr>
@@ -412,7 +407,16 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                         </div>
                       )}
                     </td>
-                    <td className="px-8 py-6 text-center font-black text-white text-base tabular-nums">{record.businessDays}</td>
+                    <td className="px-8 py-6 text-center tabular-nums">
+                      <div className="flex flex-col items-center leading-tight">
+                        <span className="font-black text-white text-base">{record.businessDays}U</span>
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-[#8B949E] uppercase tracking-widest">
+                          <span>{record.calendarDays}C</span>
+                          <span className="opacity-30">|</span>
+                          <span>{record.holidaysCount}F</span>
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-8 py-6 text-center">
                       {record.attachmentName ? (
                         <div className="flex justify-center" title={record.attachmentName}>

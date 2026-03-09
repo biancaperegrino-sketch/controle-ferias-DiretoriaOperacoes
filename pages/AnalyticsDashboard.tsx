@@ -95,11 +95,6 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ collaborators, 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
-      <header>
-        <h2 className="text-3xl font-black text-white tracking-tight uppercase">Dashboard</h2>
-        <p className="text-[#8B949E] font-bold text-sm uppercase tracking-wider">Análise de Performance e Saldos de Férias</p>
-      </header>
-
       {/* Top Selector Bar */}
       <div className="flex flex-col lg:flex-row items-center gap-4">
         <div className="w-full lg:w-1/3 space-y-2">
