@@ -41,7 +41,21 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
       balance: balanceResult,
       isNegative: balanceResult < 0,
       isZero: balanceResult === 0,
-      history: collabRecords.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+      history: collabRecords.sort((a, b) => {
+        // Saldo Inicial always comes first
+        if (a.type === RequestType.SALDO_INICIAL) return -1;
+        if (b.type === RequestType.SALDO_INICIAL) return 1;
+        
+        // Others are sorted by start date (oldest first for a timeline)
+        const dateA = new Date(a.startDate).getTime();
+        const dateB = new Date(b.startDate).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        
+        // If same date, sort by creation timestamp
+        const timeA = a.timestampCriacao ? new Date(a.timestampCriacao).getTime() : 0;
+        const timeB = b.timestampCriacao ? new Date(b.timestampCriacao).getTime() : 0;
+        return timeA - timeB;
+      })
     };
   }, [selectedId, collaborators, records]);
 
