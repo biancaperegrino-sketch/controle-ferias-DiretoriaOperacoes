@@ -51,6 +51,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
   const [lock, setLock] = useState<{userId: string, userName: string} | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   
   const [filters, setFilters] = useState({
     search: '',
@@ -161,20 +162,18 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       });
     } else {
       setEditingRecord(null);
-      const firstCollab = collaborators[0];
-      // Fix: Updated setFormData to reset the 'observation' field for new records.
       setFormData({
-        collaboratorId: firstCollab?.id || '',
+        collaboratorId: '',
         type: RequestType.AGENDADAS,
         startDate: '',
         endDate: '',
         attachmentName: '',
         attachmentData: '',
-        state: firstCollab?.state || '',
+        state: '',
         manualDays: '',
         observation: ''
       });
-      setModalSearchText(firstCollab?.name || '');
+      setModalSearchText('');
       setMetrics({ calendarDays: 0, businessDays: 0, holidaysCount: 0 });
     }
     setIsModalOpen(true);
@@ -554,6 +553,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                           value={modalSearchText}
                           onChange={e => {
                             setModalSearchText(e.target.value);
+                            setIsSearching(true);
                             const collab = collaborators.find(c => c.name.toLowerCase() === e.target.value.toLowerCase());
                             if (collab) {
                               setFormData({...formData, collaboratorId: collab.id});
@@ -566,7 +566,10 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                         />
                         <button 
                           type="button"
-                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          onClick={() => {
+                            setIsDropdownOpen(!isDropdownOpen);
+                            setIsSearching(false);
+                          }}
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-[#484F58] hover:text-white transition-colors"
                         >
                           <ChevronDown size={20} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
@@ -575,7 +578,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                         {isDropdownOpen && (
                           <div className="absolute top-full left-0 right-0 mt-2 bg-[#0D1117] border border-[#30363D] rounded-2xl shadow-2xl z-[60] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2">
                             {collaborators
-                              .filter(c => c.name.toLowerCase().includes(modalSearchText.toLowerCase()))
+                              .filter(c => !isSearching || c.name.toLowerCase().includes(modalSearchText.toLowerCase()))
                               .sort((a, b) => a.name.localeCompare(b.name))
                               .map(c => (
                                 <button
@@ -592,7 +595,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                                   <span className="text-[9px] text-[#484F58] group-hover:text-[#1F6FEB] transition-colors">{c.unit}</span>
                                 </button>
                               ))}
-                            {collaborators.filter(c => c.name.toLowerCase().includes(modalSearchText.toLowerCase())).length === 0 && (
+                            {collaborators.filter(c => !isSearching || c.name.toLowerCase().includes(modalSearchText.toLowerCase())).length === 0 && (
                               <div className="px-6 py-8 text-center text-[#484F58] text-[10px] font-black uppercase tracking-widest">
                                 Nenhum colaborador encontrado
                               </div>

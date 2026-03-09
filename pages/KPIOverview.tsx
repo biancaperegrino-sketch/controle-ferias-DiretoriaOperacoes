@@ -17,7 +17,8 @@ import {
   ChevronRight,
   ArrowRight,
   Filter,
-  User
+  User,
+  X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -48,6 +49,7 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedCollabId, setSelectedCollabId] = useState('');
+  const [showIndicatorModal, setShowIndicatorModal] = useState<{ id: string, label: string } | null>(null);
 
   const today = new Date();
   const next30Days = new Date();
@@ -110,19 +112,38 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
     const totalCollaborators = filteredCollaborators.length;
     const totalBalance = processedData.reduce((sum, c) => sum + c.balance, 0);
     const currentlyOnVacation = processedData.filter(c => c.isOnVacation).length;
-    const upcoming30Days = filteredRecords.filter(r => 
-      r.type === RequestType.AGENDADAS && 
-      new Date(r.startDate) >= today && 
-      new Date(r.startDate) <= next30Days
+    const upcoming30Days = processedData.filter(c => 
+      c.records.some(r => 
+        r.type === RequestType.AGENDADAS && 
+        new Date(r.startDate) >= today && 
+        new Date(r.startDate) <= next30Days
+      )
     ).length;
 
     return [
-      { id: 'collabs', label: 'Colaboradores', value: totalCollaborators, icon: <Users size={20} />, color: 'bg-blue-500', shadow: 'shadow-blue-500/20' },
-      { id: 'balance', label: 'Saldo Disponível', value: totalBalance, icon: <Wallet size={20} />, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20' },
-      { id: 'current', label: 'Em Férias Agora', value: currentlyOnVacation, icon: <Palmtree size={20} />, color: 'bg-amber-500', shadow: 'shadow-amber-500/20' },
-      { id: 'upcoming', label: 'Próximos 30 Dias', value: upcoming30Days, icon: <Clock size={20} />, color: 'bg-violet-500', shadow: 'shadow-violet-500/20' },
+      { id: 'collabs', label: 'Colaboradores', value: totalCollaborators, icon: <Users size={20} />, color: 'bg-blue-500', shadow: 'shadow-blue-500/20', clickable: false },
+      { id: 'balance', label: 'Saldo Disponível', value: totalBalance, icon: <Wallet size={20} />, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20', clickable: false },
+      { id: 'current', label: 'Em Férias Agora', value: currentlyOnVacation, icon: <Palmtree size={20} />, color: 'bg-amber-500', shadow: 'shadow-amber-500/20', clickable: true },
+      { id: 'upcoming', label: 'Próximos 30 Dias', value: upcoming30Days, icon: <Clock size={20} />, color: 'bg-violet-500', shadow: 'shadow-violet-500/20', clickable: true },
     ];
   }, [processedData, filteredRecords, filteredCollaborators.length, today, next30Days]);
+
+  const modalCollabs = useMemo(() => {
+    if (!showIndicatorModal) return [];
+    if (showIndicatorModal.id === 'current') {
+      return processedData.filter(c => c.isOnVacation);
+    }
+    if (showIndicatorModal.id === 'upcoming') {
+      return processedData.filter(c => 
+        c.records.some(r => 
+          r.type === RequestType.AGENDADAS && 
+          new Date(r.startDate) >= today && 
+          new Date(r.startDate) <= next30Days
+        )
+      );
+    }
+    return [];
+  }, [showIndicatorModal, processedData, today, next30Days]);
 
   // Chart: Vacations by Unit
   const unitChartData = useMemo(() => {
@@ -270,7 +291,8 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="bg-[#161B22] p-6 rounded-[2rem] border border-[#30363D] shadow-xl hover:border-[#1F6FEB]/50 transition-all group"
+            onClick={() => indicator.clickable && setShowIndicatorModal({ id: indicator.id, label: indicator.label })}
+            className={`bg-[#161B22] p-6 rounded-[2rem] border border-[#30363D] shadow-xl transition-all group ${indicator.clickable ? 'cursor-pointer hover:border-[#1F6FEB]/50 hover:scale-[1.02]' : ''}`}
           >
             <div className="flex items-center justify-between mb-4">
               <div className={`${indicator.color} p-3 rounded-2xl text-white ${indicator.shadow} group-hover:scale-110 transition-transform`}>
@@ -285,6 +307,91 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
           </motion.div>
         ))}
       </div>
+
+      {/* Indicator Modal */}
+      {showIndicatorModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowIndicatorModal(null)}
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-2xl bg-[#161B22] rounded-[2.5rem] border border-[#30363D] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+          >
+            <div className="p-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl text-white ${showIndicatorModal.id === 'current' ? 'bg-amber-500 shadow-amber-500/20' : 'bg-violet-500 shadow-violet-500/20'}`}>
+                  {showIndicatorModal.id === 'current' ? <Palmtree size={20} /> : <Clock size={20} />}
+                </div>
+                <div>
+                  <h3 className="font-black text-white uppercase tracking-[0.2em] text-xs">{showIndicatorModal.label}</h3>
+                  <p className="text-[10px] font-bold text-[#8B949E] uppercase tracking-widest mt-1">
+                    {modalCollabs.length} {modalCollabs.length === 1 ? 'colaborador encontrado' : 'colaboradores encontrados'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowIndicatorModal(null)}
+                className="p-3 text-[#484F58] hover:text-white hover:bg-[#30363D] rounded-xl transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <div className="space-y-4">
+                {modalCollabs.map((collab) => {
+                  const vacation = showIndicatorModal.id === 'current' 
+                    ? collab.records.find(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) <= today && new Date(r.endDate) >= today)
+                    : collab.records.find(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) >= today && new Date(r.startDate) <= next30Days);
+
+                  return (
+                    <div key={collab.id} className="p-6 bg-[#0D1117] border border-[#30363D] rounded-2xl flex items-center justify-between group hover:border-[#1F6FEB]/30 transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-[#1F6FEB]/10 border border-[#1F6FEB]/20 flex items-center justify-center text-[#1F6FEB] font-black text-sm">
+                          {collab.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-white uppercase tracking-tight text-sm">{collab.name}</h4>
+                          <p className="text-[10px] font-bold text-[#484F58] uppercase tracking-wider">{collab.role} • {collab.unit}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {vacation && (
+                          <div className="space-y-1">
+                            <p className="text-[9px] font-black text-[#8B949E] uppercase tracking-widest">Período</p>
+                            <div className="flex items-center gap-2 font-black text-white tabular-nums text-[11px]">
+                              {formatDate(vacation.startDate)} <ArrowRight size={10} className="text-[#484F58]" /> {formatDate(vacation.endDate)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {modalCollabs.length === 0 && (
+                  <div className="py-20 text-center">
+                    <p className="text-[10px] font-black text-[#484F58] uppercase tracking-widest">Nenhum colaborador nesta situação</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-6 bg-[#0D1117]/50 border-t border-[#30363D] flex justify-end">
+              <button 
+                onClick={() => setShowIndicatorModal(null)}
+                className="px-8 py-3 bg-[#30363D] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-[#484F58] transition-all"
+              >
+                Fechar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Charts */}
