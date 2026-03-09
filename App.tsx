@@ -231,8 +231,7 @@ const App: React.FC = () => {
         if (lowerEmail === ROOT_ADMIN_EMAIL) {
           role = UserRole.ADMIN;
         } else if (registered) {
-          // Only the root admin can have the ADMIN role
-          role = registered.role === UserRole.ADMIN ? UserRole.VIEWER : registered.role;
+          role = registered.role === UserRole.ADMIN ? UserRole.ADMIN : UserRole.VIEWER;
         } else {
           role = UserRole.VIEWER;
         }
@@ -401,9 +400,9 @@ const App: React.FC = () => {
   const registerUser = async (userData: RegisteredUser, password?: string) => {
     if (user?.role !== UserRole.ADMIN) return { success: false, message: "Apenas administradores podem cadastrar usuários." };
     
-    // Prevent creating other admins
-    if (userData.role === UserRole.ADMIN && userData.email.toLowerCase() !== ROOT_ADMIN_EMAIL) {
-      return { success: false, message: "Não é possível criar outros administradores. O sistema possui apenas um administrador único." };
+    // Root admin check (optional, but let's allow other admins as requested)
+    if (userData.role === UserRole.ADMIN && user.email !== ROOT_ADMIN_EMAIL) {
+      return { success: false, message: "Apenas o administrador principal pode conceder privilégios de Administrador." };
     }
     
     try {

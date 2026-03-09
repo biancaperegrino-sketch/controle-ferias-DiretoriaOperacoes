@@ -27,12 +27,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const isDefaultLogo = logo.includes('picsum.photos');
 
   const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <BarChart3 size={20} />, label: 'Quadro Geral', path: '/analytics', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <Users size={20} />, label: 'Colaboradores', path: '/collaborators', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <Calendar size={20} />, label: 'Lançamentos', path: '/vacations', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <CalendarDays size={20} />, label: 'Feriados', path: '/holidays', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <FileText size={20} />, label: 'Relatório Indiv.', path: '/report', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <BarChart3 size={20} />, label: 'Quadro Geral', path: '/analytics', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <Users size={20} />, label: 'Colaboradores', path: '/collaborators', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <Calendar size={20} />, label: 'Lançamentos', path: '/vacations', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <CalendarDays size={20} />, label: 'Feriados', path: '/holidays', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <FileText size={20} />, label: 'Relatório Indiv.', path: '/report', roles: [UserRole.ADMIN, UserRole.VIEWER] },
     { icon: <FileUp size={20} />, label: 'Importação', path: '/import', roles: [UserRole.ADMIN] },
     { icon: <History size={20} />, label: 'Audit Log', path: '/audit', roles: [UserRole.ADMIN] },
   ];
