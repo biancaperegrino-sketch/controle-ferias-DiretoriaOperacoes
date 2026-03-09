@@ -32,6 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { icon: <Users size={20} />, label: 'Colaboradores', path: '/collaborators', roles: [UserRole.ADMIN, UserRole.VIEWER] },
     { icon: <Calendar size={20} />, label: 'Lançamentos', path: '/vacations', roles: [UserRole.ADMIN, UserRole.VIEWER] },
     { icon: <CalendarDays size={20} />, label: 'Feriados', path: '/holidays', roles: [UserRole.ADMIN, UserRole.VIEWER] },
+    { icon: <FileText size={20} />, label: 'Relatórios', path: '/reports', roles: [UserRole.ADMIN, UserRole.VIEWER] },
     { icon: <FileText size={20} />, label: 'Relatório Indiv.', path: '/report', roles: [UserRole.ADMIN, UserRole.VIEWER] },
     { icon: <FileUp size={20} />, label: 'Importação', path: '/import', roles: [UserRole.ADMIN] },
     { icon: <History size={20} />, label: 'Audit Log', path: '/audit', roles: [UserRole.ADMIN] },

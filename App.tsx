@@ -39,6 +39,7 @@ import HolidaysPage from './pages/HolidaysPage';
 import IndividualReport from './pages/IndividualReport';
 import ImportPage from './pages/ImportPage';
 import ProfilePage from './pages/ProfilePage';
+import ReportsPage from './pages/ReportsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import LoginPage from './pages/LoginPage';
 
@@ -468,6 +469,7 @@ const App: React.FC = () => {
                             />
                           } />
                           <Route path="/holidays" element={<HolidaysPage holidays={holidays} />} />
+                          <Route path="/reports" element={<ReportsPage collaborators={collaborators} records={processedRecords} />} />
                           <Route path="/report" element={<IndividualReport collaborators={collaborators} records={processedRecords} />} />
                           <Route path="/import" element={
                             user.role === UserRole.ADMIN ? (

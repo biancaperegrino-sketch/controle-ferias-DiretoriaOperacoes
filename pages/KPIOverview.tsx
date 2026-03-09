@@ -112,6 +112,7 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
     const totalCollaborators = filteredCollaborators.length;
     const totalBalance = processedData.reduce((sum, c) => sum + c.balance, 0);
     const currentlyOnVacation = processedData.filter(c => c.isOnVacation).length;
+    const negativeBalances = processedData.filter(c => c.balance < 0).length;
     const upcoming30Days = processedData.filter(c => 
       c.records.some(r => 
         r.type === RequestType.AGENDADAS && 
@@ -123,6 +124,7 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
     return [
       { id: 'collabs', label: 'Colaboradores', value: totalCollaborators, icon: <Users size={20} />, color: 'bg-blue-500', shadow: 'shadow-blue-500/20', clickable: false },
       { id: 'balance', label: 'Saldo Disponível', value: totalBalance, icon: <Wallet size={20} />, color: 'bg-emerald-500', shadow: 'shadow-emerald-500/20', clickable: false },
+      { id: 'negative', label: 'Saldos Negativos', value: negativeBalances, icon: <AlertTriangle size={20} />, color: 'bg-rose-500', shadow: 'shadow-rose-500/20', clickable: true },
       { id: 'current', label: 'Em Férias Agora', value: currentlyOnVacation, icon: <Palmtree size={20} />, color: 'bg-amber-500', shadow: 'shadow-amber-500/20', clickable: true },
       { id: 'upcoming', label: 'Próximos 30 Dias', value: upcoming30Days, icon: <Clock size={20} />, color: 'bg-violet-500', shadow: 'shadow-violet-500/20', clickable: true },
     ];
@@ -132,6 +134,9 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
     if (!showIndicatorModal) return [];
     if (showIndicatorModal.id === 'current') {
       return processedData.filter(c => c.isOnVacation);
+    }
+    if (showIndicatorModal.id === 'negative') {
+      return processedData.filter(c => c.balance < 0);
     }
     if (showIndicatorModal.id === 'upcoming') {
       return processedData.filter(c => 
@@ -324,8 +329,14 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
           >
             <div className="p-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl text-white ${showIndicatorModal.id === 'current' ? 'bg-amber-500 shadow-amber-500/20' : 'bg-violet-500 shadow-violet-500/20'}`}>
-                  {showIndicatorModal.id === 'current' ? <Palmtree size={20} /> : <Clock size={20} />}
+                <div className={`p-3 rounded-2xl text-white ${
+                  showIndicatorModal.id === 'current' ? 'bg-amber-500 shadow-amber-500/20' : 
+                  showIndicatorModal.id === 'negative' ? 'bg-rose-500 shadow-rose-500/20' :
+                  'bg-violet-500 shadow-violet-500/20'
+                }`}>
+                  {showIndicatorModal.id === 'current' ? <Palmtree size={20} /> : 
+                   showIndicatorModal.id === 'negative' ? <AlertTriangle size={20} /> :
+                   <Clock size={20} />}
                 </div>
                 <div>
                   <h3 className="font-black text-white uppercase tracking-[0.2em] text-xs">{showIndicatorModal.label}</h3>
@@ -347,7 +358,9 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
                 {modalCollabs.map((collab) => {
                   const vacation = showIndicatorModal.id === 'current' 
                     ? collab.records.find(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) <= today && new Date(r.endDate) >= today)
-                    : collab.records.find(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) >= today && new Date(r.startDate) <= next30Days);
+                    : showIndicatorModal.id === 'upcoming'
+                    ? collab.records.find(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) >= today && new Date(r.startDate) <= next30Days)
+                    : null;
 
                   return (
                     <div key={collab.id} className="p-6 bg-[#0D1117] border border-[#30363D] rounded-2xl flex items-center justify-between group hover:border-[#1F6FEB]/30 transition-all">

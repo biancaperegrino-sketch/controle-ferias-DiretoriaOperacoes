@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
 import { Palmtree, ArrowDownCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash } from 'lucide-react';
 import { formatDate } from '../utils/dateUtils';
+import { useLocation } from 'react-router-dom';
 
 interface IndividualReportProps {
   collaborators: Collaborator[];
@@ -10,7 +11,16 @@ interface IndividualReportProps {
 }
 
 const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, records }) => {
-  const [selectedId, setSelectedId] = useState<string>(collaborators[0]?.id || '');
+  const location = useLocation();
+  const [selectedId, setSelectedId] = useState<string>('');
+
+  useEffect(() => {
+    if (location.state?.collaboratorId) {
+      setSelectedId(location.state.collaboratorId);
+    } else if (collaborators.length > 0 && !selectedId) {
+      setSelectedId(collaborators[0].id);
+    }
+  }, [location.state, collaborators]);
 
   const summary = useMemo(() => {
     if (!selectedId) return null;
