@@ -18,7 +18,12 @@ import {
   AlertTriangle,
   History,
   Search,
-  Lock
+  Lock,
+  ChevronDown,
+  FileText,
+  Image as ImageIcon,
+  Mail,
+  Upload
 } from 'lucide-react';
 import { useAuth } from '../App';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -45,6 +50,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
   const [lock, setLock] = useState<{userId: string, userName: string} | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const [filters, setFilters] = useState({
     search: '',
@@ -91,6 +97,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     startDate: '',
     endDate: '',
     attachmentName: '',
+    attachmentData: '',
     state: '',
     manualDays: '',
     observation: ''
@@ -141,6 +148,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         startDate: record.startDate,
         endDate: record.endDate,
         attachmentName: record.attachmentName || '',
+        attachmentData: record.attachmentData || '',
         state: record.state,
         manualDays: isInitial ? record.businessDays.toString() : '',
         observation: record.observation || ''
@@ -161,6 +169,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         startDate: '',
         endDate: '',
         attachmentName: '',
+        attachmentData: '',
         state: firstCollab?.state || '',
         manualDays: '',
         observation: ''
@@ -265,8 +274,25 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setFormData(prev => ({ ...prev, attachmentName: file.name }));
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setFormData(prev => ({ 
+          ...prev, 
+          attachmentName: file.name,
+          attachmentData: base64
+        }));
+      };
+      reader.readAsDataURL(file);
     }
+  };
+
+  const removeAttachment = () => {
+    setFormData(prev => ({
+      ...prev,
+      attachmentName: '',
+      attachmentData: ''
+    }));
   };
 
   const filteredRecords = records.filter(record => {
@@ -279,7 +305,15 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     return matchesSearch && matchesCollab;
   });
 
-  const sortedRecords = [...filteredRecords].sort((a,b) => b.startDate.localeCompare(a.startDate));
+  const sortedRecords = [...filteredRecords].sort((a, b) => {
+    // Sort by creation timestamp first (most recent first)
+    const timeA = a.timestampCriacao ? new Date(a.timestampCriacao).getTime() : 0;
+    const timeB = b.timestampCriacao ? new Date(b.timestampCriacao).getTime() : 0;
+    if (timeB !== timeA) return timeB - timeA;
+    
+    // Then by start date (most recent first)
+    return b.startDate.localeCompare(a.startDate);
+  });
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
@@ -419,9 +453,20 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     </td>
                     <td className="px-8 py-6 text-center">
                       {record.attachmentName ? (
-                        <div className="flex justify-center" title={record.attachmentName}>
-                          <Paperclip size={18} className="text-[#1F6FEB]" />
-                        </div>
+                        <button 
+                          onClick={() => {
+                            if (record.attachmentData) {
+                              const win = window.open();
+                              if (win) {
+                                win.document.write(`<iframe src="${record.attachmentData}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                              }
+                            }
+                          }}
+                          className="p-2 text-[#1F6FEB] hover:bg-[#1F6FEB]/10 rounded-lg transition-all"
+                          title={record.attachmentName}
+                        >
+                          <Paperclip size={18} />
+                        </button>
                       ) : <span className="text-[#30363D]">-</span>}
                     </td>
                     {isAdmin && (
@@ -497,32 +542,65 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
                 <div className="lg:col-span-7 space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
+                    <div className="relative">
                       <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Colaborador Destino</label>
-                      <div className="relative">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58]" size={18} />
+                      <div className="relative group">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#484F58] z-10" size={18} />
                         <input 
-                          list="collaborators-list"
                           required
-                          placeholder="PESQUISAR COLABORADOR..."
-                          className="w-full pl-14 pr-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none font-black text-xs uppercase text-white"
+                          type="text"
+                          placeholder="PESQUISAR OU SELECIONAR..."
+                          className="w-full pl-14 pr-12 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl focus:ring-2 focus:ring-[#1F6FEB]/40 focus:border-[#1F6FEB] outline-none font-black text-xs uppercase text-white transition-all"
                           value={modalSearchText}
                           onChange={e => {
                             setModalSearchText(e.target.value);
-                            const collab = collaborators.find(c => c.name === e.target.value);
+                            const collab = collaborators.find(c => c.name.toLowerCase() === e.target.value.toLowerCase());
                             if (collab) {
                               setFormData({...formData, collaboratorId: collab.id});
                             } else {
                               setFormData({...formData, collaboratorId: ''});
                             }
+                            setIsDropdownOpen(true);
                           }}
+                          onFocus={() => setIsDropdownOpen(true)}
                         />
-                        <datalist id="collaborators-list">
-                          {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                            <option key={c.id} value={c.name} />
-                          ))}
-                        </datalist>
+                        <button 
+                          type="button"
+                          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-[#484F58] hover:text-white transition-colors"
+                        >
+                          <ChevronDown size={20} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isDropdownOpen && (
+                          <div className="absolute top-full left-0 right-0 mt-2 bg-[#0D1117] border border-[#30363D] rounded-2xl shadow-2xl z-[60] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2">
+                            {collaborators
+                              .filter(c => c.name.toLowerCase().includes(modalSearchText.toLowerCase()))
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  className="w-full px-6 py-4 text-left hover:bg-[#1F6FEB]/10 text-xs font-black uppercase tracking-widest text-white border-b border-[#30363D] last:border-0 transition-colors flex items-center justify-between group"
+                                  onClick={() => {
+                                    setModalSearchText(c.name);
+                                    setFormData({...formData, collaboratorId: c.id});
+                                    setIsDropdownOpen(false);
+                                  }}
+                                >
+                                  <span>{c.name}</span>
+                                  <span className="text-[9px] text-[#484F58] group-hover:text-[#1F6FEB] transition-colors">{c.unit}</span>
+                                </button>
+                              ))}
+                            {collaborators.filter(c => c.name.toLowerCase().includes(modalSearchText.toLowerCase())).length === 0 && (
+                              <div className="px-6 py-8 text-center text-[#484F58] text-[10px] font-black uppercase tracking-widest">
+                                Nenhum colaborador encontrado
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
+                      {isDropdownOpen && <div className="fixed inset-0 z-[55]" onClick={() => setIsDropdownOpen(false)} />}
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Tipo de Solicitação</label>
@@ -578,6 +656,43 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       </div>
                     </div>
                   )}
+
+                  <div className="space-y-4">
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-1">Anexar Documento (PDF, Imagem ou E-mail)</label>
+                    <div className="relative">
+                      {!formData.attachmentName ? (
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#30363D] rounded-3xl cursor-pointer hover:border-[#1F6FEB]/50 hover:bg-[#1F6FEB]/5 transition-all group">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <Upload className="w-8 h-8 mb-3 text-[#484F58] group-hover:text-[#1F6FEB] transition-colors" />
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#8B949E] group-hover:text-white transition-colors">Clique ou arraste para anexar</p>
+                            <p className="text-[9px] font-bold text-[#484F58] mt-1">PDF, PNG, JPG, EML</p>
+                          </div>
+                          <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,image/*,.eml,.msg" />
+                        </label>
+                      ) : (
+                        <div className="flex items-center justify-between p-4 bg-[#0D1117] border border-[#1F6FEB]/30 rounded-2xl animate-in zoom-in-95 duration-200">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 bg-[#1F6FEB]/10 rounded-xl flex items-center justify-center text-[#1F6FEB]">
+                              {formData.attachmentName.toLowerCase().endsWith('.pdf') ? <FileText size={20} /> : 
+                               formData.attachmentName.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/) ? <ImageIcon size={20} /> : 
+                               <Mail size={20} />}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-black text-white uppercase tracking-tight truncate max-w-[200px]">{formData.attachmentName}</span>
+                              <span className="text-[9px] font-bold text-[#484F58] uppercase tracking-widest">Documento Anexado</span>
+                            </div>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={removeAttachment}
+                            className="p-2 text-[#484F58] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Observações Adicionais</label>

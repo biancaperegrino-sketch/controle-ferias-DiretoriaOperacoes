@@ -8,8 +8,14 @@ import {
   Edit2,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Mail,
+  Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -58,7 +64,15 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
       const matchesUnit = !selectedUnit || item.collabUnit === selectedUnit;
       const matchesState = !selectedState || item.collabState === selectedState;
       return matchesSearch && matchesUnit && matchesState;
-    }).sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+    }).sort((a, b) => {
+      // Sort by creation timestamp first (most recent first)
+      const timeA = a.timestampCriacao ? new Date(a.timestampCriacao).getTime() : 0;
+      const timeB = b.timestampCriacao ? new Date(b.timestampCriacao).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA;
+      
+      // Then by start date (most recent first)
+      return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+    });
   }, [records, collaborators, search, selectedUnit, selectedState]);
 
   const totalPages = Math.ceil(processedData.length / itemsPerPage);
@@ -90,10 +104,43 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
     }
   };
 
+  const handleExportExcel = () => {
+    const exportData = records.map(record => {
+      const collab = collaborators.find(c => c.id === record.collaboratorId);
+      return {
+        'Unidade': collab?.unit || 'N/A',
+        'Função': collab?.role || 'N/A',
+        'Estado': collab?.state || 'N/A',
+        'Nome do colaborador': collab?.name || 'N/A',
+        'Data de início': formatDate(record.startDate),
+        'Data de fim': formatDate(record.endDate),
+        'Tipo de Solicitação': getRequestTypeLabel(record.type),
+        'Dias Corridos': record.calendarDays,
+        'Dias úteis': record.businessDays,
+        'Observação': record.observation || ''
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Lançamentos");
+    
+    // Generate filename with current date
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Lancamentos_Ferias_${date}.xlsx`);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       {/* Top Actions */}
       <div className="flex justify-end gap-4">
+        <button 
+          onClick={handleExportExcel}
+          className="px-6 py-3 bg-emerald-600/10 border border-emerald-500/30 text-emerald-500 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-500/20 transition-all"
+        >
+          <Download size={16} />
+          Exportar para Excel
+        </button>
         {isAdmin && (
           <>
             <button 
@@ -166,6 +213,7 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
                 <th className="px-10 py-6">Solicitação</th>
                 <th className="px-10 py-6">Início / Fim</th>
                 <th className="px-10 py-6 text-center">Dias (C / Ú / F)</th>
+                <th className="px-10 py-6 text-center">Doc</th>
                 <th className="px-10 py-6 text-center">Saldo Atual</th>
                 <th className="px-10 py-6 text-right">Ações</th>
               </tr>
@@ -202,6 +250,26 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
                     <div className="font-black text-[10px] uppercase tracking-widest text-[#8B949E]">
                       <span className="text-white">{item.calendarDays}C</span> / <span className="text-[#1F6FEB]">{item.businessDays}U</span> / <span className="text-amber-500">{item.holidaysCount}F</span>
                     </div>
+                  </td>
+                  <td className="px-10 py-6 text-center">
+                    {item.attachmentName ? (
+                      <button 
+                        onClick={() => {
+                          if (item.attachmentData) {
+                            const win = window.open();
+                            if (win) {
+                              win.document.write(`<iframe src="${item.attachmentData}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                            }
+                          }
+                        }}
+                        className="p-2 text-[#1F6FEB] hover:bg-[#1F6FEB]/10 rounded-lg transition-all"
+                        title={item.attachmentName}
+                      >
+                        <Paperclip size={18} />
+                      </button>
+                    ) : (
+                      <span className="text-[#30363D]">-</span>
+                    )}
                   </td>
                   <td className="px-10 py-6 text-center">
                     <div className={`inline-flex flex-col items-center px-4 py-2 rounded-2xl border ${item.currentBalance > 30 ? 'bg-rose-500/10 border-rose-500/30' : 'bg-[#0D1117] border-[#30363D]'}`}>
