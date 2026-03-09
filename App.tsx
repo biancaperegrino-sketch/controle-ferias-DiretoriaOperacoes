@@ -31,8 +31,8 @@ import { INITIAL_COLLABORATORS, INITIAL_RECORDS, INITIAL_HOLIDAYS } from './cons
 // Components
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import Dashboard from './pages/Dashboard';
-import AnalyticsDashboard from './pages/AnalyticsDashboard';
+import GeneralBoard from './pages/GeneralBoard';
+import KPIOverview from './pages/KPIOverview';
 import CollaboratorsPage from './pages/CollaboratorsPage';
 import VacationsPage from './pages/VacationsPage';
 import HolidaysPage from './pages/HolidaysPage';
@@ -451,15 +451,15 @@ const App: React.FC = () => {
               <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
               <Route path="/*" element={
                 user ? (
-                  <div className="flex min-h-screen bg-[#0D1117]">
+                  <div className="flex h-screen bg-[#0D1117] overflow-hidden">
                     <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-                    <main className="flex-1 flex flex-col md:ml-72">
+                    <main className="flex-1 flex flex-col md:ml-72 h-full overflow-hidden">
                       <Header onMenuClick={() => setSidebarOpen(true)} />
-                      <div className="p-4 md:p-8 flex-1">
+                      <div className="p-4 md:p-8 flex-1 overflow-y-auto custom-scrollbar">
                         <div className="w-full h-full">
                           <Routes>
-                          <Route path="/" element={<Dashboard collaborators={collaborators} records={processedRecords} holidays={holidays} />} />
-                          <Route path="/analytics" element={<AnalyticsDashboard collaborators={collaborators} records={processedRecords} />} />
+                          <Route path="/" element={<KPIOverview collaborators={collaborators} records={processedRecords} holidays={holidays} />} />
+                          <Route path="/analytics" element={<GeneralBoard collaborators={collaborators} records={processedRecords} />} />
                           <Route path="/collaborators" element={<CollaboratorsPage collaborators={collaborators} />} />
                           <Route path="/vacations" element={
                             <VacationsPage 

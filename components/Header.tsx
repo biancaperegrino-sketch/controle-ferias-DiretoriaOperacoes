@@ -13,8 +13,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Quadro Geral';
-    if (path === '/analytics') return 'Analytics';
+    if (path === '/') return 'Dashboard';
+    if (path === '/analytics') return 'Quadro Geral';
     if (path === '/collaborators') return 'Colaboradores';
     if (path === '/vacations') return 'Lançamentos';
     if (path === '/holidays') return 'Feriados';
@@ -27,8 +27,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const getPageSubtitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Controle centralizado de saldos e dias úteis de férias de toda a diretoria';
-    if (path === '/analytics') return 'Análise estatística e visualização de tendências de utilização de férias';
+    if (path === '/') return 'Indicadores gerenciais e análise de saldos';
+    if (path === '/analytics') return 'Controle centralizado de saldos e dias úteis de férias de toda a diretoria';
     if (path === '/collaborators') return 'Gestão completa do cadastro, cargos e unidades dos colaboradores';
     if (path === '/vacations') return 'Registro, agendamento e acompanhamento de períodos de férias e abonos';
     if (path === '/holidays') return 'Manutenção do calendário de feriados para cálculos automáticos de dias úteis';

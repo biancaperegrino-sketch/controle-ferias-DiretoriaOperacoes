@@ -465,8 +465,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
 
       {isAdmin && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-[#0D1117]/90 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-[#161B22] w-full max-w-5xl rounded-[3rem] shadow-2xl border border-[#30363D] overflow-hidden animate-in zoom-in duration-200">
-            <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50">
+          <div className="bg-[#161B22] w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl border border-[#30363D] overflow-hidden flex flex-col animate-in zoom-in duration-200">
+            <div className="px-10 py-8 border-b border-[#30363D] flex items-center justify-between bg-[#0D1117]/50 shrink-0">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 bg-[#1F6FEB] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
                    <Palmtree size={24} />
@@ -482,7 +482,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSave} className="p-10">
+            <form onSubmit={handleSave} className="p-10 overflow-y-auto custom-scrollbar">
               {lock && (
                 <div className="mb-8 p-6 bg-rose-500/10 border border-rose-500/30 rounded-[2rem] flex items-center gap-4 animate-in slide-in-from-top-4">
                   <div className="h-12 w-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/20">

@@ -27,8 +27,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const isDefaultLogo = logo.includes('picsum.photos');
 
   const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Quadro Geral', path: '/', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
-    { icon: <BarChart3 size={20} />, label: 'Dashboard', path: '/analytics', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
+    { icon: <BarChart3 size={20} />, label: 'Quadro Geral', path: '/analytics', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
     { icon: <Users size={20} />, label: 'Colaboradores', path: '/collaborators', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
     { icon: <Calendar size={20} />, label: 'Lançamentos', path: '/vacations', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
     { icon: <CalendarDays size={20} />, label: 'Feriados', path: '/holidays', roles: [UserRole.ADMIN, UserRole.COMMON, UserRole.VIEWER] },
@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       )}
 
       <aside className={`
-        fixed left-0 top-0 z-50 w-72 bg-[#161B22] border-r border-[#30363D] flex flex-col h-screen overflow-y-auto transition-transform duration-300
+        fixed left-0 top-0 z-50 w-72 bg-[#161B22] border-r border-[#30363D] flex flex-col h-screen overflow-y-auto custom-scrollbar transition-transform duration-300
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="p-8">
