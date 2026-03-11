@@ -92,7 +92,49 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
     worksheet['!cols'] = wscols;
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatório');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Resumo');
+
+    // Add detailed records sheet
+    const detailedData: any[] = [];
+    data.forEach(collab => {
+      const collabRecords = records.filter(r => r.collaboratorId === collab.id);
+      if (collabRecords.length === 0) {
+         detailedData.push({
+            'Nome': collab.name,
+            'Tipo': 'Sem lançamentos',
+            'Início': '-',
+            'Fim': '-',
+            'Dias Corridos': '-',
+            'Dias Úteis': '-',
+            'Observação': '-'
+         });
+      } else {
+         collabRecords.forEach(record => {
+            detailedData.push({
+              'Nome': collab.name,
+              'Tipo': record.type,
+              'Início': record.startDate ? new Date(record.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
+              'Fim': record.endDate ? new Date(record.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
+              'Dias Corridos': record.calendarDays,
+              'Dias Úteis': record.businessDays,
+              'Observação': record.observation || '-'
+            });
+         });
+      }
+    });
+
+    const detailsWorksheet = XLSX.utils.json_to_sheet(detailedData);
+    detailsWorksheet['!cols'] = [
+      { wch: 30 }, // Nome
+      { wch: 25 }, // Tipo
+      { wch: 15 }, // Início
+      { wch: 15 }, // Fim
+      { wch: 15 }, // Dias Corridos
+      { wch: 15 }, // Dias Úteis
+      { wch: 40 }, // Observação
+    ];
+    XLSX.utils.book_append_sheet(workbook, detailsWorksheet, 'Lançamentos');
+
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
   };
 

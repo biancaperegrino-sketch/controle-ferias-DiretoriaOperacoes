@@ -200,9 +200,19 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
           const parsed: RawHolidayRecord[] = data.slice(headerRowIndex + 1)
             .filter(row => row && row.length > 0 && row[map.nome])
             .map(row => {
+              let dateVal = row[map.data];
+              let dateStr = '';
+              if (dateVal instanceof Date) {
+                const y = dateVal.getFullYear();
+                const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+                const d = String(dateVal.getDate()).padStart(2, '0');
+                dateStr = `${y}-${m}-${d}`;
+              } else {
+                dateStr = String(dateVal || '').trim();
+              }
               return {
                 nome: String(row[map.nome] || '').trim(),
-                data: String(row[map.data] || '').trim(),
+                data: dateStr,
                 tipo: map.tipo !== -1 ? String(row[map.tipo] || 'Nacional').trim() : 'Nacional',
                 estado: map.estado !== -1 ? String(row[map.estado] || '').trim() : ''
               };
@@ -227,16 +237,20 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     if (!dateVal) return null;
     
     if (dateVal instanceof Date) {
-      return dateVal.toISOString().split('T')[0];
+      const y = dateVal.getFullYear();
+      const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+      const d = String(dateVal.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
 
-    const dateStr = String(dateVal).trim().replace(/\s/g, '');
+    const dateStr = String(dateVal).trim();
+    const dateStrNoSpaces = dateStr.replace(/\s/g, '');
     
     // YYYY-MM-DD
-    if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) return dateStr.substring(0, 10);
+    if (dateStrNoSpaces.match(/^\d{4}-\d{2}-\d{2}/)) return dateStrNoSpaces.substring(0, 10);
     
     // DD/MM/YYYY
-    const brMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const brMatch = dateStrNoSpaces.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (brMatch) {
       const d = brMatch[1].padStart(2, '0');
       const m = brMatch[2].padStart(2, '0');
@@ -245,9 +259,18 @@ const HolidaysPage: React.FC<HolidaysPageProps> = ({ holidays }) => {
     }
 
     // Excel serial number
-    if (!isNaN(Number(dateStr)) && Number(dateStr) > 30000) {
-      const date = new Date((Number(dateStr) - 25569) * 86400 * 1000);
+    if (!isNaN(Number(dateStrNoSpaces)) && Number(dateStrNoSpaces) > 30000) {
+      const date = new Date((Number(dateStrNoSpaces) - 25569) * 86400 * 1000);
       return date.toISOString().split('T')[0];
+    }
+
+    // Try parsing long date strings like "Thu Jan 20 2011..."
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime())) {
+      const y = parsedDate.getFullYear();
+      const m = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const d = String(parsedDate.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
 
     return null;
