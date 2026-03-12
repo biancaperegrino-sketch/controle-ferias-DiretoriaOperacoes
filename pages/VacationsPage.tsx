@@ -55,7 +55,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   
   const [filters, setFilters] = useState({
     search: '',
-    collaboratorId: ''
+    collaboratorId: '',
+    type: ''
   });
 
   // Listen for locks
@@ -300,8 +301,9 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     
     const matchesSearch = collabName.toLowerCase().includes(filters.search.toLowerCase());
     const matchesCollab = !filters.collaboratorId || record.collaboratorId === filters.collaboratorId;
+    const matchesType = !filters.type || record.type === filters.type;
     
-    return matchesSearch && matchesCollab;
+    return matchesSearch && matchesCollab && matchesType;
   });
 
   const sortedRecords = [...filteredRecords].sort((a, b) => {
@@ -350,7 +352,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       </div>
 
       <div className="bg-[#161B22] p-6 rounded-[1.5rem] border border-[#30363D] shadow-xl">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-3">
             <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E]">Pesquisar Colaborador</label>
             <div className="relative">
@@ -374,6 +376,19 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
               <option value="">Todos os Colaboradores</option>
               {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E]">Tipo de Solicitação</label>
+            <select 
+              className="w-full px-6 py-4 bg-[#0D1117] border border-[#30363D] rounded-2xl font-black text-[11px] uppercase text-[#8B949E] outline-none focus:ring-2 focus:ring-[#1F6FEB]/40 transition-all appearance-none cursor-pointer" 
+              value={filters.type} 
+              onChange={e => setFilters({...filters, type: e.target.value})}
+            >
+              <option value="">Todos os Tipos</option>
+              {Object.values(RequestType).map(type => (
+                <option key={type} value={type}>{type}</option>
               ))}
             </select>
           </div>
