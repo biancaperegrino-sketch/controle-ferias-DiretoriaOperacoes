@@ -178,9 +178,8 @@ const App: React.FC = () => {
   // Recalculate metrics in real-time for all records based on current holidays
   const processedRecords = useMemo(() => {
     return records.map(record => {
-      // Saldo Inicial and Abono Pecuniário (if implemented similarly) might have manual days
-      // For now, we only skip recalculation for SALDO_INICIAL
-      if (record.type === RequestType.SALDO_INICIAL) return record;
+      // Saldo Inicial and Compensação have manual days
+      if (record.type === RequestType.SALDO_INICIAL || record.type === RequestType.COMPENSACAO) return record;
       
       const metrics = calculateVacationMetrics(record.startDate, record.endDate, record.state, holidays);
       
@@ -294,7 +293,22 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAuthReady || !user) return;
     const unsub = onSnapshot(collection(db, 'records'), (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VacationRecord));
+      const list = snapshot.docs.map(doc => {
+        const data = doc.data() as VacationRecord;
+        const validTypes = Object.values(RequestType) as string[];
+        const typeLower = (data.type || '').toLowerCase();
+        let matchedType = validTypes.find(t => t.toLowerCase() === typeLower);
+        
+        if (!matchedType && data.type) {
+           if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
+           else if (typeLower.includes('agend') || typeLower.includes('rh') || typeLower.includes('marcado')) matchedType = RequestType.AGENDADAS;
+           else if (typeLower.includes('comp') || typeLower.includes('adicion') || typeLower.includes('extra')) matchedType = RequestType.COMPENSACAO;
+           else if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
+           else if (typeLower.includes('abono') || typeLower.includes('pecun')) matchedType = RequestType.ABONO_PECUNIARIO;
+        }
+        
+        return { id: doc.id, ...data, type: (matchedType || data.type) as RequestType };
+      });
       if (list.length === 0 && isSyncing && user.role === UserRole.ADMIN) {
         INITIAL_RECORDS.forEach(r => setDoc(doc(db, 'records', r.id), r).catch(e => handleFirestoreError(e, OperationType.WRITE, 'records')));
       }

@@ -77,13 +77,17 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+
+      const compensation = collabRecords
+        .filter(r => r.type === RequestType.COMPENSACAO)
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
       
-      const balance = initial + scheduled - discounts;
+      const balance = initial + compensation + scheduled - discounts;
 
       const nextVacation = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS && new Date(r.startDate) >= today)

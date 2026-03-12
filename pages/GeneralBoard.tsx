@@ -47,9 +47,10 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
       // Calculate current balance for this collaborator
       const collabRecords = records.filter(r => r.collaboratorId === record.collaboratorId);
       const initial = collabRecords.filter(r => r.type === RequestType.SALDO_INICIAL).reduce((sum, r) => sum + r.businessDays, 0);
-      const scheduled = collabRecords.filter(r => r.type === RequestType.AGENDADAS).reduce((sum, r) => sum + r.businessDays, 0);
-      const discounts = collabRecords.filter(r => r.type === RequestType.DESCONTO).reduce((sum, r) => sum + r.businessDays, 0);
-      const balance = initial + scheduled - discounts;
+      const scheduled = collabRecords.filter(r => r.type === RequestType.AGENDADAS).reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      const compensation = collabRecords.filter(r => r.type === RequestType.COMPENSACAO).reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      const discounts = collabRecords.filter(r => r.type === RequestType.DESCONTO).reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      const balance = initial + compensation + scheduled - discounts;
 
       return {
         ...record,
@@ -88,6 +89,8 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
         return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
       case RequestType.AGENDADAS:
         return 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400';
+      case RequestType.COMPENSACAO:
+        return 'bg-violet-500/10 border-violet-500/30 text-violet-400';
       case RequestType.DESCONTO:
         return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
       default:
@@ -101,8 +104,10 @@ const GeneralBoard: React.FC<GeneralBoardProps> = ({ collaborators, records }) =
         return 'SALDO INICIAL';
       case RequestType.AGENDADAS:
         return 'FÉRIAS / INTEGRAIS';
+      case RequestType.COMPENSACAO:
+        return 'COMPENSAÇÃO';
       case RequestType.DESCONTO:
-        return 'DESCONTO DO SALDO DE FÉRIAS';
+        return 'DESCONTO DE FÉRIAS';
       default:
         return type;
     }

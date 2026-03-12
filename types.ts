@@ -1,8 +1,9 @@
 
 export enum RequestType {
   SALDO_INICIAL = 'Saldo Inicial',
-  DESCONTO = 'Desconto do saldo de férias',
-  AGENDADAS = 'Férias agendadas no RH',
+  DESCONTO = 'Desconto de Férias',
+  AGENDADAS = 'Férias Agendadas no RH',
+  COMPENSACAO = 'Compensação',
   ABONO_PECUNIARIO = 'Abono Pecuniário'
 }
 

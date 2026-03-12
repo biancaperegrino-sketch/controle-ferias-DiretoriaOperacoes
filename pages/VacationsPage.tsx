@@ -112,7 +112,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
 
   const [modalSearchText, setModalSearchText] = useState('');
 
-  const isInitialBalance = formData.type === RequestType.SALDO_INICIAL;
+  const isManualEntry = formData.type === RequestType.SALDO_INICIAL || formData.type === RequestType.COMPENSACAO;
 
   useEffect(() => {
     if (formData.collaboratorId) {
@@ -124,10 +124,10 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   }, [formData.collaboratorId, collaborators]);
 
   useEffect(() => {
-    if (!isInitialBalance && formData.startDate && formData.endDate && formData.state) {
+    if (!isManualEntry && formData.startDate && formData.endDate && formData.state) {
       const result = calculateVacationMetrics(formData.startDate, formData.endDate, formData.state, holidays);
       setMetrics(result);
-    } else if (isInitialBalance) {
+    } else if (isManualEntry) {
       setMetrics({
         calendarDays: 0,
         businessDays: parseInt(formData.manualDays) || 0,
@@ -141,7 +141,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       if (!isAdmin) return; // Only admin can edit
       setEditingRecord(record);
       await acquireLock(record.id);
-      const isInitial = record.type === RequestType.SALDO_INICIAL;
+      const isManual = record.type === RequestType.SALDO_INICIAL || record.type === RequestType.COMPENSACAO;
       // Fix: Updated setFormData to include the 'observation' field from the record when editing.
       setFormData({
         collaboratorId: record.collaboratorId,
@@ -151,7 +151,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
         attachmentName: record.attachmentName || '',
         attachmentData: record.attachmentData || '',
         state: record.state,
-        manualDays: isInitial ? record.businessDays.toString() : '',
+        manualDays: isManual ? record.businessDays.toString() : '',
         observation: record.observation || ''
       });
       setModalSearchText(collaborators.find(c => c.id === record.collaboratorId)?.name || '');
@@ -183,8 +183,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     e.preventDefault();
     if (lock) return; // Prevent saving if locked by another user
 
-    const finalStartDate = isInitialBalance ? (formData.startDate || new Date().toISOString().split('T')[0]) : formData.startDate;
-    const finalEndDate = isInitialBalance ? (formData.endDate || finalStartDate) : formData.endDate;
+    const finalStartDate = isManualEntry ? (formData.startDate || new Date().toISOString().split('T')[0]) : formData.startDate;
+    const finalEndDate = isManualEntry ? (formData.endDate || finalStartDate) : formData.endDate;
 
     const id = editingRecord?.id || Math.random().toString(36).substr(2, 9);
     const finalRecord: VacationRecord = {
@@ -431,6 +431,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       <span className={`
                         inline-flex items-center px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border
                         ${record.type === RequestType.SALDO_INICIAL ? 'border-blue-500/30 bg-blue-900/40 text-[#1F6FEB]' : 
+                          record.type === RequestType.COMPENSACAO ? 'border-violet-500/30 bg-violet-900/40 text-violet-500' :
                           record.type === RequestType.DESCONTO ? 'border-rose-500/30 bg-rose-900/40 text-rose-500' : 
                           'border-emerald-500/30 bg-emerald-900/40 text-emerald-500'}
                       `}>
@@ -438,7 +439,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       </span>
                     </td>
                     <td className="px-8 py-6 text-[#8B949E] font-bold text-xs tabular-nums uppercase">
-                      {record.type === RequestType.SALDO_INICIAL && record.startDate === record.endDate ? '-' : (
+                      {(record.type === RequestType.SALDO_INICIAL || record.type === RequestType.COMPENSACAO) && record.startDate === record.endDate ? '-' : (
                         <div className="flex items-center gap-2">
                           {formatDate(record.startDate)} <span className="text-[#30363D] tracking-tighter">—</span> {formatDate(record.endDate)}
                         </div>
@@ -618,12 +619,13 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       >
                         <option value={RequestType.SALDO_INICIAL}>SALDO INICIAL</option>
                         <option value={RequestType.AGENDADAS}>FÉRIAS AGENDADAS NO RH</option>
-                        <option value={RequestType.DESCONTO}>DESCONTO DO SALDO</option>
+                        <option value={RequestType.COMPENSACAO}>COMPENSAÇÃO</option>
+                        <option value={RequestType.DESCONTO}>DESCONTO DE FÉRIAS</option>
                       </select>
                     </div>
                   </div>
 
-                  {!isInitialBalance ? (
+                  {!isManualEntry ? (
                     <div className="grid grid-cols-2 gap-6 animate-in slide-in-from-top-2">
                       <div>
                         <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-3">Início</label>
@@ -744,18 +746,18 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                 </div>
 
                 <div className="lg:col-span-5 flex flex-col gap-6">
-                  <div className={`rounded-[2.5rem] p-10 flex flex-col justify-between border transition-all duration-500 flex-1 ${isInitialBalance ? 'bg-[#0D1117] border-[#30363D]' : 'bg-[#1F6FEB]/10 border-[#1F6FEB]/30'}`}>
+                  <div className={`rounded-[2.5rem] p-10 flex flex-col justify-between border transition-all duration-500 flex-1 ${isManualEntry ? 'bg-[#0D1117] border-[#30363D]' : 'bg-[#1F6FEB]/10 border-[#1F6FEB]/30'}`}>
                     <div className="space-y-8">
                       <div className="flex items-center gap-3">
-                        <div className={`p-3 rounded-2xl ${isInitialBalance ? 'bg-[#161B22] text-[#8B949E]' : 'bg-[#1F6FEB] text-white'}`}>
+                        <div className={`p-3 rounded-2xl ${isManualEntry ? 'bg-[#161B22] text-[#8B949E]' : 'bg-[#1F6FEB] text-white'}`}>
                           <Calculator size={22} />
                         </div>
-                        <h4 className={`text-xs font-black uppercase tracking-[0.2em] ${isInitialBalance ? 'text-[#8B949E]' : 'text-white'}`}>
+                        <h4 className={`text-xs font-black uppercase tracking-[0.2em] ${isManualEntry ? 'text-[#8B949E]' : 'text-white'}`}>
                           Resumo do Lançamento
                         </h4>
                       </div>
 
-                      {!isInitialBalance ? (
+                      {!isManualEntry ? (
                         <div className="space-y-4 animate-in fade-in duration-300">
                           <div className="flex justify-between items-center text-sm border-b border-[#30363D] pb-3">
                             <span className="text-[#8B949E] font-bold uppercase tracking-widest text-[10px]">Dias Corridos</span>
@@ -780,7 +782,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       )}
                     </div>
                     
-                    {!isInitialBalance && (
+                    {!isManualEntry && (
                       <div className="mt-10 flex items-start gap-4 bg-[#0D1117] p-6 rounded-3xl border border-[#30363D]">
                         <AlertTriangle size={20} className="text-[#1F6FEB] shrink-0" />
                         <p className="text-[10px] text-[#8B949E] font-bold uppercase tracking-widest leading-relaxed">
@@ -803,7 +805,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     </button>
                     <button 
                       type="submit" 
-                      disabled={!!lock || !formData.collaboratorId || (!isInitialBalance && metrics.calendarDays === 0) || (isInitialBalance && !formData.manualDays)}
+                      disabled={!!lock || !formData.collaboratorId || (!isManualEntry && metrics.calendarDays === 0) || (isManualEntry && !formData.manualDays)}
                       className="flex-[2] px-10 py-4 bg-[#1F6FEB] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#388BFD] transition-all shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       {lock ? 'Bloqueado para Edição' : 'Salvar Lançamento'}

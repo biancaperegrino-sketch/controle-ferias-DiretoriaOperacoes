@@ -37,18 +37,23 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+
+      const compensation = collabRecords
+        .filter(r => r.type === RequestType.COMPENSACAO)
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
       
-      const balance = initial + scheduled - discounts;
+      const balance = initial + compensation + scheduled - discounts;
 
       return {
         ...collab,
         initial,
         scheduled,
+        compensation,
         discounts,
         balance,
       };
@@ -133,6 +138,7 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
                 <th className="px-10 py-5">Colaborador</th>
                 <th className="px-10 py-5 text-center">Inicial</th>
                 <th className="px-10 py-5 text-center">Agendadas</th>
+                <th className="px-10 py-5 text-center">Compensação</th>
                 <th className="px-10 py-5 text-center">Descontos</th>
                 <th className="px-10 py-5 text-center">Saldo Atual</th>
                 <th className="px-10 py-5 text-right">Ações</th>
@@ -154,7 +160,8 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
                   </td>
                   <td className="px-10 py-6 text-center tabular-nums font-bold text-[#8B949E]">{collab.initial}U</td>
                   <td className="px-10 py-6 text-center tabular-nums font-bold text-[#1F6FEB]">{collab.scheduled}U</td>
-                  <td className="px-10 py-6 text-center tabular-nums font-bold text-rose-500">{collab.discounts}U</td>
+                  <td className="px-10 py-6 text-center tabular-nums font-bold text-violet-500">{collab.compensation}U</td>
+                  <td className="px-10 py-6 text-center tabular-nums font-bold text-rose-500">-{collab.discounts}U</td>
                   <td className="px-10 py-6 text-center">
                     <div className={`inline-flex flex-col items-center px-5 py-2 rounded-2xl border ${
                       collab.balance < 0 ? 'bg-rose-500/10 border-rose-500/30' : 
@@ -233,17 +240,18 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
                     <td className="px-10 py-6">
                       <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border ${
                         record.type === RequestType.SALDO_INICIAL ? 'border-blue-500/30 bg-blue-900/40 text-[#1F6FEB]' : 
+                        record.type === RequestType.COMPENSACAO ? 'border-violet-500/30 bg-violet-900/40 text-violet-500' :
                         record.type === RequestType.DESCONTO ? 'border-rose-500/30 bg-rose-900/40 text-rose-500' : 
                         'border-emerald-500/30 bg-emerald-900/40 text-emerald-500'}`}>
                         {record.type}
                       </span>
                     </td>
                     <td className="px-10 py-6 text-[#8B949E] font-bold text-xs uppercase tabular-nums">
-                      {record.type === RequestType.SALDO_INICIAL ? 'LANÇAMENTO BASE' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
+                      {record.type === RequestType.SALDO_INICIAL || record.type === RequestType.COMPENSACAO ? 'LANÇAMENTO BASE' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
                     </td>
                     <td className="px-10 py-6 text-right tabular-nums">
                       <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
-                        {record.type === RequestType.DESCONTO ? '-' : ''}{record.businessDays}U
+                        {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(record.businessDays)}U
                       </span>
                     </td>
                   </tr>

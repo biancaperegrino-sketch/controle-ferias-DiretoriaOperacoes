@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
-import { Palmtree, ArrowDownCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash } from 'lucide-react';
+import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash } from 'lucide-react';
 import { formatDate } from '../utils/dateUtils';
 import { useLocation } from 'react-router-dom';
 
@@ -34,19 +34,24 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
 
     const scheduled = collabRecords
       .filter(r => r.type === RequestType.AGENDADAS)
-      .reduce((sum, r) => sum + r.businessDays, 0);
+      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+
+    const compensation = collabRecords
+      .filter(r => r.type === RequestType.COMPENSACAO)
+      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
 
     const discounts = collabRecords
       .filter(r => r.type === RequestType.DESCONTO)
-      .reduce((sum, r) => sum + r.businessDays, 0);
+      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
 
-    // Saldo Disponível = Saldo inicial + Férias agendadas no RH – Desconto do saldo de férias
-    const balanceResult = initial + scheduled - discounts;
+    // Saldo Disponível = Saldo inicial + Compensação + Férias agendadas no RH - Desconto de férias
+    const balanceResult = initial + compensation + scheduled - discounts;
 
     return {
       collaborator: collab,
       initial,
       scheduled,
+      compensation,
       discounts,
       balance: balanceResult,
       isNegative: balanceResult < 0,
@@ -88,7 +93,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
 
       {summary && summary.collaborator ? (
         <div className="space-y-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
             <div className="bg-[#161B22] p-8 rounded-[2rem] border border-[#30363D]">
               <div className="flex items-center gap-4 text-[#8B949E] mb-5">
                 <Wallet size={20} />
@@ -106,11 +111,19 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
             </div>
 
             <div className="bg-[#161B22] p-8 rounded-[2rem] border border-[#30363D]">
+              <div className="flex items-center gap-4 text-violet-500 mb-5">
+                <ArrowUpCircle size={20} />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Compensação</span>
+              </div>
+              <p className="text-4xl font-black text-white tabular-nums tracking-tighter">{summary.compensation} <span className="text-xs opacity-50">DIAS</span></p>
+            </div>
+
+            <div className="bg-[#161B22] p-8 rounded-[2rem] border border-[#30363D]">
               <div className="flex items-center gap-4 text-rose-500 mb-5">
                 <ArrowDownCircle size={20} />
                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">Descontos</span>
               </div>
-              <p className="text-4xl font-black text-white tabular-nums tracking-tighter">{summary.discounts} <span className="text-xs opacity-50">DIAS</span></p>
+              <p className="text-4xl font-black text-white tabular-nums tracking-tighter">-{summary.discounts} <span className="text-xs opacity-50">DIAS</span></p>
             </div>
 
             <div className={`p-8 rounded-[2rem] border shadow-2xl transition-colors ${
@@ -147,6 +160,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                       <td className="px-10 py-6">
                         <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl border ${
                           record.type === RequestType.SALDO_INICIAL ? 'border-blue-500/30 bg-blue-900/40 text-[#1F6FEB]' : 
+                          record.type === RequestType.COMPENSACAO ? 'border-violet-500/30 bg-violet-900/40 text-violet-500' :
                           record.type === RequestType.DESCONTO ? 'border-rose-500/30 bg-rose-900/40 text-rose-500' : 
                           'border-emerald-500/30 bg-emerald-900/40 text-emerald-500'}`}>
                           {record.type}
@@ -158,7 +172,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                       <td className="px-10 py-6 text-right tabular-nums">
                         <div className="flex flex-col items-end leading-tight">
                           <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
-                            {record.type === RequestType.DESCONTO ? '-' : ''}{record.businessDays}U
+                            {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(record.businessDays)}U
                           </span>
                           <div className="flex items-center gap-1 text-[9px] font-bold text-[#8B949E] uppercase tracking-widest">
                             <span>{record.calendarDays}C</span>

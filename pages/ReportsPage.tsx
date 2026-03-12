@@ -35,19 +35,24 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+
+      const compensation = collabRecords
+        .filter(r => r.type === RequestType.COMPENSACAO)
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
       
-      const balance = initial + scheduled - discounts;
+      const balance = initial + compensation + scheduled - discounts;
 
       return {
         ...collab,
         balance,
         initial,
         scheduled,
+        compensation,
         discounts
       };
     });
@@ -74,6 +79,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
       'Estado': item.state,
       'Saldo Inicial': item.initial,
       'Agendadas RH': item.scheduled,
+      'Compensação': item.compensation,
       'Descontos': item.discounts,
       'Saldo Final': item.balance
     })));
@@ -86,6 +92,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
       { wch: 10 }, // Estado
       { wch: 15 }, // Saldo Inicial
       { wch: 15 }, // Agendadas RH
+      { wch: 15 }, // Compensação
       { wch: 15 }, // Descontos
       { wch: 15 }, // Saldo Final
     ];

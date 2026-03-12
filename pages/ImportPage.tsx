@@ -189,17 +189,18 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holiday
         let matchedType = validTypes.find(t => t.toLowerCase() === typeLower);
         
         if (!matchedType && record.tipo) {
-           if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
+           if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
            else if (typeLower.includes('agend') || typeLower.includes('rh') || typeLower.includes('marcado')) matchedType = RequestType.AGENDADAS;
-           else if (typeLower.includes('desc') || typeLower.includes('uso') || typeLower.includes('utiliz')) matchedType = RequestType.DESCONTO;
+           else if (typeLower.includes('comp') || typeLower.includes('adicion') || typeLower.includes('extra')) matchedType = RequestType.COMPENSACAO;
+           else if (typeLower.includes('saldo') || typeLower.includes('inicial')) matchedType = RequestType.SALDO_INICIAL;
            else if (typeLower.includes('abono') || typeLower.includes('pecun')) matchedType = RequestType.ABONO_PECUNIARIO;
         }
 
-        const isInitial = matchedType === RequestType.SALDO_INICIAL;
+        const isManualEntry = matchedType === RequestType.SALDO_INICIAL || matchedType === RequestType.COMPENSACAO;
         const normalizedStart = normalizeDate(record.inicio);
         const normalizedEnd = normalizeDate(record.fim);
 
-        if (!isInitial) {
+        if (!isManualEntry) {
           if (!normalizedStart) errors.push(`Início obrigatório`);
           if (!normalizedEnd) errors.push(`Fim obrigatório`);
         }
@@ -211,9 +212,9 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holiday
           errors.push(`Tipo desconhecido: "${record.tipo}"`);
         }
 
-        // Recalculate metrics based on system rules if not SALDO_INICIAL
+        // Recalculate metrics based on system rules if not SALDO_INICIAL or COMPENSACAO
         let calculatedMetrics = { calendarDays: 0, businessDays: 0, holidaysCount: 0 };
-        if (matchedType === RequestType.SALDO_INICIAL) {
+        if (matchedType === RequestType.SALDO_INICIAL || matchedType === RequestType.COMPENSACAO) {
           calculatedMetrics.businessDays = Math.floor(parseNumber(record.dias_uteis));
         } else if (finalStart && finalEnd) {
           calculatedMetrics = calculateVacationMetrics(finalStart, finalEnd, (record.estado || 'SP').toUpperCase().substring(0, 2), holidays);
@@ -272,7 +273,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holiday
         // 2. Create record
         const recordId = Math.random().toString(36).substr(2, 9);
         const recordRef = doc(db, 'records', recordId);
-        const isInitial = raw.tipo === RequestType.SALDO_INICIAL;
+        const isManualEntry = raw.tipo === RequestType.SALDO_INICIAL || raw.tipo === RequestType.COMPENSACAO;
         
         ops.push({
           type: 'set',
@@ -283,7 +284,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holiday
             type: raw.tipo as RequestType,
             startDate: raw.inicio,
             endDate: raw.fim,
-            calendarDays: isInitial ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
+            calendarDays: isManualEntry ? 0 : Math.floor(parseNumber(raw.dias_corridos)),
             businessDays: Math.floor(parseNumber(raw.dias_uteis)),
             holidaysCount: raw.holidaysCount || 0,
             unit: raw.unidade || 'Não informada',
