@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
-import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash } from 'lucide-react';
+import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download } from 'lucide-react';
 import { formatDate } from '../utils/dateUtils';
 import { useLocation } from 'react-router-dom';
+import ExcelJS from 'exceljs';
 
 interface IndividualReportProps {
   collaborators: Collaborator[];
@@ -74,21 +75,161 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
     };
   }, [selectedId, collaborators, records]);
 
+  const exportToExcel = async () => {
+    if (!summary || !summary.collaborator) return;
+
+    const { collaborator, history, balance, initial, scheduled, compensation, discounts } = summary;
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Relatório Individual');
+
+    // FGV Blue: #003B71
+    const fgvBlue = '003B71';
+    const white = 'FFFFFF';
+
+    // Title
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `RELATÓRIO INDIVIDUAL DE FÉRIAS - ${collaborator.name}`;
+    titleCell.font = { bold: true, size: 14, color: { argb: white } };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fgvBlue } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    worksheet.mergeCells('A1:I1');
+    worksheet.getRow(1).height = 30;
+
+    // Summary Section Header
+    const summaryHeaderRow = worksheet.getRow(3);
+    summaryHeaderRow.values = ['INFORMAÇÕES DO COLABORADOR', '', '', '', '', 'RESUMO DOS SALDOS', '', '', ''];
+    summaryHeaderRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: white } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fgvBlue } };
+      cell.alignment = { horizontal: 'center' };
+    });
+    worksheet.mergeCells('A3:D3');
+    worksheet.mergeCells('F3:I3');
+
+    // Identity Data
+    worksheet.getCell('A4').value = 'Nome:';
+    worksheet.getCell('B4').value = collaborator.name;
+    worksheet.getCell('A5').value = 'Cargo:';
+    worksheet.getCell('B5').value = collaborator.role;
+    worksheet.getCell('A6').value = 'Unidade:';
+    worksheet.getCell('B6').value = collaborator.unit;
+    worksheet.getCell('A7').value = 'Estado:';
+    worksheet.getCell('B7').value = collaborator.state;
+
+    // Balance Data
+    worksheet.getCell('F4').value = 'Saldo Inicial:';
+    worksheet.getCell('G4').value = initial;
+    worksheet.getCell('F5').value = 'Agendadas RH:';
+    worksheet.getCell('G5').value = scheduled;
+    worksheet.getCell('F6').value = 'Compensação:';
+    worksheet.getCell('G6').value = compensation;
+    worksheet.getCell('F7').value = 'Descontos:';
+    worksheet.getCell('G7').value = discounts;
+    
+    const balanceLabelCell = worksheet.getCell('F8');
+    balanceLabelCell.value = 'SALDO DISPONÍVEL:';
+    balanceLabelCell.font = { bold: true };
+    
+    const balanceValueCell = worksheet.getCell('G8');
+    balanceValueCell.value = balance;
+    balanceValueCell.font = { bold: true, color: { argb: balance < 0 ? 'FF0000' : '008000' } };
+
+    // Timeline Header
+    const historyTitleRow = worksheet.getRow(10);
+    historyTitleRow.values = ['LINHA DO TEMPO - HISTÓRICO COMPLETO'];
+    historyTitleRow.getCell(1).font = { bold: true, color: { argb: white } };
+    historyTitleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fgvBlue } };
+    historyTitleRow.getCell(1).alignment = { horizontal: 'center' };
+    worksheet.mergeCells('A10:I10');
+
+    const headerRow = worksheet.getRow(11);
+    headerRow.values = [
+      'Categoria', 
+      'Data Início', 
+      'Data Fim', 
+      'Dias Úteis', 
+      'D. Corridos', 
+      'Feriados', 
+      'Observação', 
+      'Registrado por', 
+      'Data Registro'
+    ];
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: white } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fgvBlue } };
+      cell.border = { bottom: { style: 'thin' } };
+    });
+
+    // Add History Data
+    history.forEach((record, index) => {
+      const row = worksheet.addRow([
+        record.type,
+        record.startDate ? new Date(record.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
+        record.endDate ? new Date(record.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
+        record.businessDays,
+        record.calendarDays,
+        record.holidaysCount,
+        record.observation || '-',
+        record.usuarioCriacao || '-',
+        record.timestampCriacao ? new Date(record.timestampCriacao).toLocaleString('pt-BR') : '-'
+      ]);
+
+      if (record.type === RequestType.DESCONTO) {
+        row.getCell(4).font = { color: { argb: 'FF0000' } };
+      }
+    });
+
+    // Column Widths
+    worksheet.columns = [
+      { width: 25 }, // Categoria
+      { width: 12 }, // Início
+      { width: 12 }, // Fim
+      { width: 10 }, // Uteis
+      { width: 10 }, // Corridos
+      { width: 10 }, // Feriados
+      { width: 40 }, // Obs
+      { width: 25 }, // Registrado por
+      { width: 20 }, // Data Registro
+    ];
+
+    // Download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `Relatorio_Individual_${collaborator.name.replace(/\s+/g, '_')}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
-      <div className="bg-[#161B22] p-8 rounded-[2.5rem] border border-[#30363D] shadow-xl">
-        <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-4">Selecionar Colaborador</label>
-        <div className="relative max-w-xl">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#1F6FEB]" size={22} />
-          <select 
-            className="w-full pl-14 pr-10 py-5 bg-[#0D1117] border border-[#30363D] rounded-3xl focus:ring-4 focus:ring-[#1F6FEB]/20 outline-none appearance-none font-black text-xs uppercase text-white cursor-pointer"
-            value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-          >
-            <option value="">PESQUISAR FUNCIONÁRIO...</option>
-            {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+      <div className="bg-[#161B22] p-8 rounded-[2.5rem] border border-[#30363D] shadow-xl flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="flex-1 max-w-xl">
+          <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-4">Selecionar Colaborador</label>
+          <div className="relative">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-[#1F6FEB]" size={22} />
+            <select 
+              className="w-full pl-14 pr-10 py-5 bg-[#0D1117] border border-[#30363D] rounded-3xl focus:ring-4 focus:ring-[#1F6FEB]/20 outline-none appearance-none font-black text-xs uppercase text-white cursor-pointer"
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+            >
+              <option value="">PESQUISAR FUNCIONÁRIO...</option>
+              {[...collaborators].sort((a, b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
         </div>
+
+        {summary && summary.collaborator && (
+          <button 
+            onClick={exportToExcel}
+            className="flex items-center gap-3 px-8 py-5 bg-[#1F6FEB] hover:bg-[#388BFD] text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest transition-all shadow-lg hover:shadow-[#1F6FEB]/20 active:scale-95 shrink-0"
+          >
+            <Download size={18} /> Exportar Excel
+          </button>
+        )}
       </div>
 
       {summary && summary.collaborator ? (
