@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { VacationRecord, Collaborator, Holiday, RequestType, UserRole } from '../types';
-import { calculateVacationMetrics, formatDate } from '../utils/dateUtils';
+import { calculateVacationMetrics, formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { 
   Plus, 
   X, 
@@ -127,7 +127,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   useEffect(() => {
     if (!isManualEntry && formData.startDate && formData.endDate && formData.state) {
       const result = calculateVacationMetrics(formData.startDate, formData.endDate, formData.state, holidays);
-      setMetrics(result);
+      const businessDays = getAdjustedBusinessDays(formData.type, result.businessDays, result.calendarDays);
+      setMetrics({ ...result, businessDays });
     } else if (isManualEntry) {
       setMetrics({
         calendarDays: 0,
@@ -462,7 +463,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     </td>
                     <td className="px-8 py-6 text-center tabular-nums">
                       <div className="flex flex-col items-center leading-tight">
-                        <span className="font-black text-white text-base">{record.businessDays}U</span>
+                        <span className="font-black text-white text-base">{getAdjustedBusinessDays(record.type, record.businessDays, record.calendarDays)}U</span>
                         <div className="flex items-center gap-1 text-[9px] font-bold text-[#8B949E] uppercase tracking-widest">
                           <span>{record.calendarDays}C</span>
                           <span className="opacity-30">|</span>

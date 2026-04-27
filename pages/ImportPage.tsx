@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Collaborator, VacationRecord, RequestType, ImportHistory, UserRole, Holiday } from '../types';
-import { calculateVacationMetrics } from '../utils/dateUtils';
+import { calculateVacationMetrics, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { 
   FileUp, 
   Download, 
@@ -218,6 +218,7 @@ const ImportPage: React.FC<ImportPageProps> = ({ collaborators, records, holiday
           calculatedMetrics.businessDays = Math.floor(parseNumber(record.dias_uteis));
         } else if (finalStart && finalEnd) {
           calculatedMetrics = calculateVacationMetrics(finalStart, finalEnd, (record.estado || 'SP').toUpperCase().substring(0, 2), holidays);
+          calculatedMetrics.businessDays = getAdjustedBusinessDays(matchedType || record.tipo, calculatedMetrics.businessDays, calculatedMetrics.calendarDays);
         }
 
         return { 

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
 import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download } from 'lucide-react';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 
@@ -35,15 +35,15 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
 
     const scheduled = collabRecords
       .filter(r => r.type === RequestType.AGENDADAS)
-      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
     const compensation = collabRecords
       .filter(r => r.type === RequestType.COMPENSACAO)
-      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
     const discounts = collabRecords
       .filter(r => r.type === RequestType.DESCONTO)
-      .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+      .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
     // Saldo Disponível = Saldo inicial + Compensação + Férias agendadas no RH - Desconto de férias
     const balanceResult = initial + compensation + scheduled - discounts;
@@ -167,7 +167,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
         record.type,
         record.startDate ? new Date(record.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
         record.endDate ? new Date(record.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
-        record.businessDays,
+        getAdjustedBusinessDays(record.type, record.businessDays, record.calendarDays),
         record.calendarDays,
         record.holidaysCount,
         record.observation || '-',
@@ -313,7 +313,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                       <td className="px-10 py-6 text-right tabular-nums">
                         <div className="flex flex-col items-end leading-tight">
                           <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
-                            {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(record.businessDays)}U
+                            {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(getAdjustedBusinessDays(record.type, record.businessDays, record.calendarDays))}U
                           </span>
                           <div className="flex items-center gap-1 text-[9px] font-bold text-[#8B949E] uppercase tracking-widest">
                             <span>{record.calendarDays}C</span>

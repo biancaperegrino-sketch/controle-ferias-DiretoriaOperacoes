@@ -75,3 +75,11 @@ export const formatDate = (dateStr: string): string => {
   const [year, month, day] = dateStr.split('-');
   return `${day}/${month}/${year}`;
 };
+
+export const getAdjustedBusinessDays = (type: string, businessDays: number, calendarDays: number): number => {
+  if (type === 'Férias Agendadas no RH') {
+    if (calendarDays === 20) return 15;
+    if (calendarDays === 30) return 22;
+  }
+  return businessDays;
+};

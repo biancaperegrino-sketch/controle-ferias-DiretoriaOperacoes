@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../App';
 import * as XLSX from 'xlsx';
 import { motion } from 'motion/react';
+import { getAdjustedBusinessDays } from '../utils/dateUtils';
 
 interface ReportsPageProps {
   collaborators: Collaborator[];
@@ -35,15 +36,15 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const compensation = collabRecords
         .filter(r => r.type === RequestType.COMPENSACAO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
       
       const balance = initial + compensation + scheduled - discounts;
 
@@ -123,7 +124,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ collaborators, records }) => 
               'Início': record.startDate ? new Date(record.startDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
               'Fim': record.endDate ? new Date(record.endDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-',
               'Dias Corridos': record.calendarDays,
-              'Dias Úteis': record.businessDays,
+              'Dias Úteis': getAdjustedBusinessDays(record.type, record.businessDays, record.calendarDays),
               'Observação': record.observation || '-'
             });
          });
