@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
-import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download } from 'lucide-react';
+import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download, Eye } from 'lucide-react';
 import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
@@ -74,6 +74,22 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
       })
     };
   }, [selectedId, collaborators, records]);
+
+  const viewAttachment = (record: VacationRecord) => {
+    if (!record.attachmentData || !record.attachmentName) return;
+    
+    try {
+      const link = document.createElement('a');
+      link.href = record.attachmentData;
+      link.download = record.attachmentName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error opening attachment:', error);
+      alert('Não foi possível abrir o arquivo.');
+    }
+  };
 
   const exportToExcel = async () => {
     if (!summary || !summary.collaborator) return;
@@ -292,6 +308,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                   <tr>
                     <th className="px-10 py-5">Categoria</th>
                     <th className="px-10 py-5">Evento</th>
+                    <th className="px-10 py-5 text-center">DOC</th>
                     <th className="px-10 py-5 text-right">Dias (C/U/F)</th>
                   </tr>
                 </thead>
@@ -310,6 +327,19 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                       <td className="px-10 py-6 text-[#8B949E] font-bold text-xs uppercase tabular-nums">
                         {record.type === RequestType.SALDO_INICIAL && record.startDate === record.endDate ? '-' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
                       </td>
+                      <td className="px-10 py-6 text-center">
+                        {record.attachmentData ? (
+                          <button 
+                            onClick={() => viewAttachment(record)}
+                            className="p-3 bg-[#1F6FEB]/10 hover:bg-[#1F6FEB] text-[#1F6FEB] hover:text-white rounded-2xl transition-all group flex items-center justify-center mx-auto"
+                            title={record.attachmentName}
+                          >
+                            <Eye size={18} className="group-hover:scale-110 transition-transform" />
+                          </button>
+                        ) : (
+                          <span className="text-[#30363D]">-</span>
+                        )}
+                      </td>
                       <td className="px-10 py-6 text-right tabular-nums">
                         <div className="flex flex-col items-end leading-tight">
                           <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
@@ -327,7 +357,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                 </tbody>
                 <tfoot className="bg-[#0D1117] border-t border-[#30363D]">
                   <tr>
-                    <td colSpan={2} className="px-10 py-8 text-right text-[#484F58] font-black uppercase text-[10px] tracking-widest">Saldo Disponível Consolidado:</td>
+                    <td colSpan={3} className="px-10 py-8 text-right text-[#484F58] font-black uppercase text-[10px] tracking-widest">Saldo Disponível Consolidado:</td>
                     <td className={`px-10 py-8 text-right text-4xl font-black tabular-nums tracking-tighter ${summary.isNegative ? 'text-rose-500' : summary.balance > 0 ? 'text-emerald-500' : 'text-white'}`}>
                       {summary.isNegative ? '-' : ''}{Math.abs(summary.balance)} <span className="text-xs uppercase font-bold opacity-50">DIAS</span>
                     </td>
