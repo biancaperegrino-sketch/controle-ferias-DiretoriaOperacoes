@@ -52,6 +52,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [lock, setLock] = useState<{userId: string, userName: string} | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
   const [filters, setFilters] = useState({
     search: '',
@@ -294,6 +295,38 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       attachmentName: '',
       attachmentData: ''
     }));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setFormData(prev => ({ 
+          ...prev, 
+          attachmentName: file.name,
+          attachmentData: base64
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const filteredRecords = records.filter(record => {
@@ -686,10 +719,16 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-1">Anexar Documento (PDF, Imagem ou E-mail)</label>
                     <div className="relative">
                       {!formData.attachmentName ? (
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#30363D] rounded-3xl cursor-pointer hover:border-[#1F6FEB]/50 hover:bg-[#1F6FEB]/5 transition-all group">
+                        <label 
+                          className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all group ${isDragging ? 'border-[#1F6FEB] bg-[#1F6FEB]/10' : 'border-[#30363D] hover:border-[#1F6FEB]/50 hover:bg-[#1F6FEB]/5'}`}
+                          onDragOver={handleDragOver}
+                          onDragEnter={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                        >
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <Upload className="w-8 h-8 mb-3 text-[#484F58] group-hover:text-[#1F6FEB] transition-colors" />
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[#8B949E] group-hover:text-white transition-colors">Clique ou arraste para anexar</p>
+                            <Upload className={`w-8 h-8 mb-3 transition-colors ${isDragging ? 'text-[#1F6FEB]' : 'text-[#484F58] group-hover:text-[#1F6FEB]'}`} />
+                            <p className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isDragging ? 'text-white' : 'text-[#8B949E] group-hover:text-white'}`}>Clique ou arraste para anexar</p>
                             <p className="text-[9px] font-bold text-[#484F58] mt-1">PDF, PNG, JPG, EML</p>
                           </div>
                           <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,image/*,.eml,.msg" />
