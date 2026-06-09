@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Collaborator, VacationRecord, Holiday, RequestType, UserRole } from '../types';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { 
   Users, 
   CalendarDays, 
@@ -73,19 +73,19 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
       
       const initial = collabRecords
         .filter(r => r.type === RequestType.SALDO_INICIAL)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays), 0);
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const compensation = collabRecords
         .filter(r => r.type === RequestType.COMPENSACAO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
       
       const balance = initial + compensation + scheduled - discounts;
 
@@ -161,7 +161,7 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
       const unitCollabs = filteredCollaborators.filter(c => c.unit === unit).map(c => c.id);
       const unitVacations = filteredRecords
         .filter(r => r.type === RequestType.AGENDADAS && unitCollabs.includes(r.collaboratorId))
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays), 0);
       return { name: unit, dias: unitVacations };
     }).sort((a, b) => b.dias - a.dias);
   }, [filteredCollaborators, filteredRecords]);
@@ -178,7 +178,7 @@ const KPIOverview: React.FC<DashboardProps> = ({ collaborators, records, holiday
       });
       return {
         name: month,
-        férias: monthRecords.reduce((sum, r) => sum + r.businessDays, 0)
+        férias: monthRecords.reduce((sum, r) => sum + getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays), 0)
       };
     });
   }, [filteredRecords, today]);

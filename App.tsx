@@ -254,7 +254,7 @@ const App: React.FC = () => {
 
   // Real-time Sync: Registered Users
   useEffect(() => {
-    if (!isAuthReady) return;
+    if (!isAuthReady || !user) return;
     const unsub = onSnapshot(collection(db, 'registered_users'), (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RegisteredUser));
       

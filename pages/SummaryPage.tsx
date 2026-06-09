@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
-import { formatDate } from '../utils/dateUtils';
+import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { 
   Users, 
   Wallet, 
@@ -33,19 +33,19 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
       
       const initial = collabRecords
         .filter(r => r.type === RequestType.SALDO_INICIAL)
-        .reduce((sum, r) => sum + r.businessDays, 0);
+        .reduce((sum, r) => sum + getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays), 0);
         
       const scheduled = collabRecords
         .filter(r => r.type === RequestType.AGENDADAS)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const compensation = collabRecords
         .filter(r => r.type === RequestType.COMPENSACAO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
 
       const discounts = collabRecords
         .filter(r => r.type === RequestType.DESCONTO)
-        .reduce((sum, r) => sum + Math.abs(r.businessDays), 0);
+        .reduce((sum, r) => sum + Math.abs(getAdjustedBusinessDays(r.type, r.businessDays, r.calendarDays)), 0);
       
       const balance = initial + compensation + scheduled - discounts;
 
@@ -251,7 +251,7 @@ const SummaryPage: React.FC<SummaryPageProps> = ({ collaborators, records }) => 
                     </td>
                     <td className="px-10 py-6 text-right tabular-nums">
                       <span className={`font-black text-base ${record.type === RequestType.DESCONTO ? 'text-rose-500' : 'text-white'}`}>
-                        {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(record.businessDays)}U
+                        {record.type === RequestType.DESCONTO ? '-' : ''}{Math.abs(getAdjustedBusinessDays(record.type, record.businessDays, record.calendarDays))}U
                       </span>
                     </td>
                   </tr>
