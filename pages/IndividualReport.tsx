@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
-import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download, Eye } from 'lucide-react';
+import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download, Eye, Paperclip } from 'lucide-react';
 import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
 import { openOrDownloadAttachment } from '../utils/attachmentStorage';
 import { useLocation } from 'react-router-dom';
@@ -77,8 +77,8 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
   }, [selectedId, collaborators, records]);
 
   const viewAttachment = (record: VacationRecord) => {
-    if (!record.attachmentName) return;
-    openOrDownloadAttachment(record.id, record.attachmentName, record.attachmentData);
+    if (!record.attachmentName && !record.attachmentData) return;
+    openOrDownloadAttachment(record.id, record.attachmentName || 'Anexo', record.attachmentData);
   };
 
   const exportToExcel = async () => {
@@ -318,13 +318,13 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                         {record.type === RequestType.SALDO_INICIAL && record.startDate === record.endDate ? '-' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
                       </td>
                       <td className="px-10 py-6 text-center">
-                        {record.attachmentName ? (
+                        {(record.attachmentName || record.attachmentData) ? (
                           <button 
                             onClick={() => viewAttachment(record)}
-                            className="p-3 bg-[#1F6FEB]/10 hover:bg-[#1F6FEB] text-[#1F6FEB] hover:text-white rounded-2xl transition-all group flex items-center justify-center mx-auto"
-                            title={record.attachmentName}
+                            className="p-2 text-[#1F6FEB] hover:bg-[#1F6FEB]/10 rounded-lg transition-all group flex items-center justify-center mx-auto"
+                            title={record.attachmentName || 'Visualizar Anexo'}
                           >
-                            <Eye size={18} className="group-hover:scale-110 transition-transform" />
+                            <Paperclip size={18} className="group-hover:scale-110 transition-transform" />
                           </button>
                         ) : (
                           <span className="text-[#30363D]">-</span>

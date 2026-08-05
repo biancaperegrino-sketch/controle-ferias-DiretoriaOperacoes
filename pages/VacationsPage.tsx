@@ -534,11 +534,11 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                       </div>
                     </td>
                     <td className="px-8 py-6 text-center">
-                      {record.attachmentName ? (
+                      {(record.attachmentName || record.attachmentData) ? (
                         <button 
-                          onClick={() => openOrDownloadAttachment(record.id, record.attachmentName, record.attachmentData)}
+                          onClick={() => openOrDownloadAttachment(record.id, record.attachmentName || 'Anexo', record.attachmentData)}
                           className="p-2 text-[#1F6FEB] hover:bg-[#1F6FEB]/10 rounded-lg transition-all"
-                          title={record.attachmentName}
+                          title={record.attachmentName || 'Visualizar Anexo'}
                         >
                           <Paperclip size={18} />
                         </button>
