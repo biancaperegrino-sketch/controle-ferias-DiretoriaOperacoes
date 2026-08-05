@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { VacationRecord, Collaborator, Holiday, RequestType, UserRole } from '../types';
 import { calculateVacationMetrics, formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
+import { processFileAttachment } from '../utils/fileUtils';
+import { saveRecordWithAttachment, loadFullAttachment, deleteRecordWithAttachment, openOrDownloadAttachment } from '../utils/attachmentStorage';
 import { 
   Plus, 
   X, 
@@ -53,6 +55,8 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   
   const [filters, setFilters] = useState({
     search: '',
@@ -145,14 +149,19 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       setEditingRecord(record);
       await acquireLock(record.id);
       const isManual = record.type === RequestType.SALDO_INICIAL || record.type === RequestType.COMPENSACAO;
-      // Fix: Updated setFormData to include the 'observation' field from the record when editing.
+      
+      let fullAttachmentData = record.attachmentData || '';
+      if (record.attachmentName && !fullAttachmentData) {
+        fullAttachmentData = await loadFullAttachment(record.id, record.attachmentData);
+      }
+
       setFormData({
         collaboratorId: record.collaboratorId,
         type: record.type,
         startDate: record.startDate,
         endDate: record.endDate,
         attachmentName: record.attachmentName || '',
-        attachmentData: record.attachmentData || '',
+        attachmentData: fullAttachmentData,
         state: record.state,
         manualDays: isManual ? record.businessDays.toString() : '',
         observation: record.observation || ''
@@ -189,33 +198,51 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     const finalStartDate = isManualEntry ? (formData.startDate || new Date().toISOString().split('T')[0]) : formData.startDate;
     const finalEndDate = isManualEntry ? (formData.endDate || finalStartDate) : formData.endDate;
 
+    const collab = collaborators.find(c => c.id === formData.collaboratorId);
     const id = editingRecord?.id || Math.random().toString(36).substr(2, 9);
+    const attachmentData = formData.attachmentData || '';
+
     const finalRecord: VacationRecord = {
       id,
-      ...formData,
-      startDate: finalStartDate,
-      endDate: finalEndDate,
-      calendarDays: metrics.calendarDays,
-      businessDays: metrics.businessDays,
-      holidaysCount: metrics.holidaysCount,
-      usuarioCriacao: editingRecord?.usuarioCriacao || user?.name,
+      collaboratorId: formData.collaboratorId,
+      type: formData.type,
+      startDate: finalStartDate || '',
+      endDate: finalEndDate || '',
+      calendarDays: metrics.calendarDays || 0,
+      businessDays: metrics.businessDays || 0,
+      holidaysCount: metrics.holidaysCount || 0,
+      attachmentName: formData.attachmentName || '',
+      attachmentData: '', // Handled safely by saveRecordWithAttachment
+      unit: collab?.unit || editingRecord?.unit || '',
+      state: collab?.state || formData.state || editingRecord?.state || 'SP',
+      observation: formData.observation || '',
+      usuarioCriacao: editingRecord?.usuarioCriacao || user?.name || user?.email || 'Administrador',
       timestampCriacao: editingRecord?.timestampCriacao || new Date().toISOString(),
-      usuarioEdicao: user?.name,
+      usuarioEdicao: user?.name || user?.email || 'Administrador',
       dataHoraEdicao: new Date().toISOString(),
       statusEdicao: 'salvo'
     };
 
-    const collab = collaborators.find(c => c.id === formData.collaboratorId);
+    // Filter out any undefined values to avoid Firestore errors
+    const cleanRecord = Object.fromEntries(
+      Object.entries(finalRecord).filter(([_, v]) => v !== undefined)
+    );
 
-    if (editingRecord) {
-      await setDoc(doc(db, 'records', editingRecord.id), finalRecord);
-      await releaseLock(editingRecord.id);
-      addLog(`Alterou registro (${formData.type}) para ${collab?.name}`);
-    } else {
-      await setDoc(doc(db, 'records', id), finalRecord);
-      addLog(`Lançou registro (${formData.type}) para ${collab?.name}`);
+    try {
+      if (editingRecord) {
+        await saveRecordWithAttachment(editingRecord.id, cleanRecord, attachmentData);
+        await releaseLock(editingRecord.id);
+        addLog(`Alterou registro (${formData.type}) para ${collab?.name || 'Colaborador'}`);
+      } else {
+        await saveRecordWithAttachment(id, cleanRecord, attachmentData);
+        addLog(`Lançou registro (${formData.type}) para ${collab?.name || 'Colaborador'}`);
+      }
+      setIsModalOpen(false);
+      setEditingRecord(null);
+    } catch (err: any) {
+      console.error('Error saving record:', err);
+      alert(`Erro ao salvar no banco de dados: ${err?.message || 'Erro inesperado ao salvar.'}`);
     }
-    setIsModalOpen(false);
   };
 
   const handleDeleteSingle = (id: string) => {
@@ -228,7 +255,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     if (!recordToDelete || !isAdmin) return;
     const record = records.find(r => r.id === recordToDelete);
     const collab = collaborators.find(c => c.id === record?.collaboratorId);
-    await deleteDoc(doc(db, 'records', recordToDelete));
+    await deleteRecordWithAttachment(recordToDelete);
     setSelectedIds(prev => {
       const next = new Set(prev);
       next.delete(recordToDelete);
@@ -273,19 +300,29 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     });
   };
 
+  const processAndSetAttachment = async (file: File) => {
+    setAttachmentError(null);
+    setIsProcessingAttachment(true);
+    try {
+      const result = await processFileAttachment(file);
+      setFormData(prev => ({
+        ...prev,
+        attachmentName: result.name,
+        attachmentData: result.data
+      }));
+    } catch (err: any) {
+      console.error('Error processing attachment:', err);
+      setAttachmentError(err?.message || 'Erro ao processar o arquivo anexado.');
+      alert(err?.message || 'Erro ao processar o arquivo anexado.');
+    } finally {
+      setIsProcessingAttachment(false);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setFormData(prev => ({ 
-          ...prev, 
-          attachmentName: file.name,
-          attachmentData: base64
-        }));
-      };
-      reader.readAsDataURL(file);
+      processAndSetAttachment(file);
     }
   };
 
@@ -295,6 +332,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       attachmentName: '',
       attachmentData: ''
     }));
+    setAttachmentError(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -316,16 +354,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
     
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setFormData(prev => ({ 
-          ...prev, 
-          attachmentName: file.name,
-          attachmentData: base64
-        }));
-      };
-      reader.readAsDataURL(file);
+      processAndSetAttachment(file);
     }
   };
 
@@ -507,14 +536,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     <td className="px-8 py-6 text-center">
                       {record.attachmentName ? (
                         <button 
-                          onClick={() => {
-                            if (record.attachmentData) {
-                              const win = window.open();
-                              if (win) {
-                                win.document.write(`<iframe src="${record.attachmentData}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-                              }
-                            }
-                          }}
+                          onClick={() => openOrDownloadAttachment(record.id, record.attachmentName, record.attachmentData)}
                           className="p-2 text-[#1F6FEB] hover:bg-[#1F6FEB]/10 rounded-lg transition-all"
                           title={record.attachmentName}
                         >
@@ -718,21 +740,33 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                   <div className="space-y-4">
                     <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8B949E] mb-1">Anexar Documento (PDF, Imagem ou E-mail)</label>
                     <div className="relative">
-                      {!formData.attachmentName ? (
-                        <label 
-                          className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all group ${isDragging ? 'border-[#1F6FEB] bg-[#1F6FEB]/10' : 'border-[#30363D] hover:border-[#1F6FEB]/50 hover:bg-[#1F6FEB]/5'}`}
-                          onDragOver={handleDragOver}
-                          onDragEnter={handleDragOver}
-                          onDragLeave={handleDragLeave}
-                          onDrop={handleDrop}
-                        >
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            <Upload className={`w-8 h-8 mb-3 transition-colors ${isDragging ? 'text-[#1F6FEB]' : 'text-[#484F58] group-hover:text-[#1F6FEB]'}`} />
-                            <p className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isDragging ? 'text-white' : 'text-[#8B949E] group-hover:text-white'}`}>Clique ou arraste para anexar</p>
-                            <p className="text-[9px] font-bold text-[#484F58] mt-1">PDF, PNG, JPG, EML</p>
-                          </div>
-                          <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,image/*,.eml,.msg" />
-                        </label>
+                      {isProcessingAttachment ? (
+                        <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#1F6FEB]/50 bg-[#1F6FEB]/5 rounded-3xl animate-pulse">
+                          <div className="w-6 h-6 border-2 border-[#1F6FEB] border-t-transparent rounded-full animate-spin mb-2" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[#1F6FEB]">Processando e otimizando anexo...</p>
+                        </div>
+                      ) : !formData.attachmentName ? (
+                        <div>
+                          <label 
+                            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all group ${isDragging ? 'border-[#1F6FEB] bg-[#1F6FEB]/10' : 'border-[#30363D] hover:border-[#1F6FEB]/50 hover:bg-[#1F6FEB]/5'}`}
+                            onDragOver={handleDragOver}
+                            onDragEnter={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                          >
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <Upload className={`w-8 h-8 mb-3 transition-colors ${isDragging ? 'text-[#1F6FEB]' : 'text-[#484F58] group-hover:text-[#1F6FEB]'}`} />
+                              <p className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isDragging ? 'text-white' : 'text-[#8B949E] group-hover:text-white'}`}>Clique ou arraste para anexar</p>
+                              <p className="text-[9px] font-bold text-[#484F58] mt-1">PDF, PNG, JPG, EML</p>
+                            </div>
+                            <input type="file" className="hidden" onChange={handleFileChange} accept=".pdf,image/*,.eml,.msg" />
+                          </label>
+                          {attachmentError && (
+                            <p className="mt-2 text-[10px] font-bold text-rose-500 uppercase tracking-wide flex items-center gap-1">
+                              <AlertCircle size={12} /> {attachmentError}
+                            </p>
+                          )}
+                        </div>
                       ) : (
                         <div className="flex items-center justify-between p-4 bg-[#0D1117] border border-[#1F6FEB]/30 rounded-2xl animate-in zoom-in-95 duration-200">
                           <div className="flex items-center gap-4">

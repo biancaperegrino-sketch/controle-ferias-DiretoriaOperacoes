@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Collaborator, VacationRecord, RequestType } from '../types';
 import { Palmtree, ArrowDownCircle, ArrowUpCircle, Wallet, FileText, Search, AlertTriangle, CheckCircle2, Calculator, Info, CircleSlash, Download, Eye } from 'lucide-react';
 import { formatDate, getAdjustedBusinessDays } from '../utils/dateUtils';
+import { openOrDownloadAttachment } from '../utils/attachmentStorage';
 import { useLocation } from 'react-router-dom';
 import ExcelJS from 'exceljs';
 
@@ -76,19 +77,8 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
   }, [selectedId, collaborators, records]);
 
   const viewAttachment = (record: VacationRecord) => {
-    if (!record.attachmentData || !record.attachmentName) return;
-    
-    try {
-      const link = document.createElement('a');
-      link.href = record.attachmentData;
-      link.download = record.attachmentName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error opening attachment:', error);
-      alert('Não foi possível abrir o arquivo.');
-    }
+    if (!record.attachmentName) return;
+    openOrDownloadAttachment(record.id, record.attachmentName, record.attachmentData);
   };
 
   const exportToExcel = async () => {
@@ -328,7 +318,7 @@ const IndividualReport: React.FC<IndividualReportProps> = ({ collaborators, reco
                         {record.type === RequestType.SALDO_INICIAL && record.startDate === record.endDate ? '-' : `${formatDate(record.startDate)} — ${formatDate(record.endDate)}`}
                       </td>
                       <td className="px-10 py-6 text-center">
-                        {record.attachmentData ? (
+                        {record.attachmentName ? (
                           <button 
                             onClick={() => viewAttachment(record)}
                             className="p-3 bg-[#1F6FEB]/10 hover:bg-[#1F6FEB] text-[#1F6FEB] hover:text-white rounded-2xl transition-all group flex items-center justify-center mx-auto"
