@@ -8,6 +8,9 @@ export async function saveRecordWithAttachment(
   attachmentData?: string
 ): Promise<void> {
   const attachment = attachmentData || '';
+  // Nunca permita que um anexo enorme seja escrito no documento principal.
+  // O limite do Firestore é 1 MiB por documento.
+  const CHUNK_SIZE = 250000;
   
   // If attachment is small (< 300KB base64, ~225KB file), store directly in main document
   if (attachment.length <= 400000) {
@@ -33,23 +36,23 @@ export async function saveRecordWithAttachment(
     attachmentData: '' // Keep main doc small (< 10KB)
   };
 
-  // 1. Save main document
-  await setDoc(doc(db, 'records', recordId), recordWithoutAttachment);
-
-  // 2. Chunk base64 string into 500,000 char pieces (~500KB per chunk)
-  const CHUNK_SIZE = 500000;
+  // 1. Chunk base64 string into 500,000 char pieces (~500KB per chunk)
   const chunks: string[] = [];
   for (let i = 0; i < attachment.length; i += CHUNK_SIZE) {
     chunks.push(attachment.slice(i, i + CHUNK_SIZE));
   }
 
-  // 3. Write chunks to subcollection `records/{recordId}/chunks/chunk_{i}`
+  // 2. Write chunks to subcollection `records/{recordId}/chunks/chunk_{i}`
   for (let i = 0; i < chunks.length; i++) {
     await setDoc(doc(db, 'records', recordId, 'chunks', `chunk_${i}`), {
       index: i,
       data: chunks[i]
     });
   }
+
+  // 3. Commit metadata only after all chunks were saved.
+  // The record will not appear as successfully saved if an upload fails.
+  await setDoc(doc(db, 'records', recordId), recordWithoutAttachment);
 
   // 4. Delete leftover old chunks if current attachment has fewer chunks
   try {
