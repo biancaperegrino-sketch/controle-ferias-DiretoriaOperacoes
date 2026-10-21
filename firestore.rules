@@ -119,6 +119,13 @@ service cloud.firestore {
     match /records/{recordId} {
       allow read: if isAuthenticated();
       allow write: if isEditor();
+
+      // Anexos grandes são divididos em documentos menores.
+      // Sem esta regra o Firebase bloqueia a gravação dos chunks.
+      match /chunks/{chunkId} {
+        allow read: if isAuthenticated();
+        allow write: if isEditor();
+      }
     }
 
     match /holidays/{holidayId} {
