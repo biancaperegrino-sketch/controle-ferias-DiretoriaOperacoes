@@ -56,6 +56,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
   const [isSearching, setIsSearching] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessingAttachment, setIsProcessingAttachment] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   
   const [filters, setFilters] = useState({
@@ -193,7 +194,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (lock) return; // Prevent saving if locked by another user
+    if (lock || isSaving || isProcessingAttachment) return; // Evita envios duplicados e anexos incompletos
 
     const finalStartDate = isManualEntry ? (formData.startDate || new Date().toISOString().split('T')[0]) : formData.startDate;
     const finalEndDate = isManualEntry ? (formData.endDate || finalStartDate) : formData.endDate;
@@ -228,6 +229,7 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       Object.entries(finalRecord).filter(([_, v]) => v !== undefined)
     );
 
+    setIsSaving(true);
     try {
       if (editingRecord) {
         await saveRecordWithAttachment(editingRecord.id, cleanRecord, attachmentData);
@@ -241,7 +243,14 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
       setEditingRecord(null);
     } catch (err: any) {
       console.error('Error saving record:', err);
-      alert(`Erro ao salvar no banco de dados: ${err?.message || 'Erro inesperado ao salvar.'}`);
+      const message = err?.code === 'permission-denied'
+        ? 'Sem permissão no Firebase para salvar o lançamento/anexo. Verifique as regras do Firestore.'
+        : /maximum allowed size|exceeds the maximum/i.test(err?.message || '')
+          ? 'O documento ultrapassou o limite do Firestore. O anexo precisa ser gravado em partes.'
+          : (err?.message || 'Erro inesperado ao salvar.');
+      alert(`Não foi possível salvar o lançamento: ${message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -894,10 +903,10 @@ const VacationsPage: React.FC<VacationsPageProps> = ({ records, collaborators, h
                     </button>
                     <button 
                       type="submit" 
-                      disabled={!!lock || !formData.collaboratorId || (!isManualEntry && metrics.calendarDays === 0) || (isManualEntry && !formData.manualDays)}
+                      disabled={!!lock || isSaving || isProcessingAttachment || !formData.collaboratorId || (!isManualEntry && metrics.calendarDays === 0) || (isManualEntry && !formData.manualDays)}
                       className="flex-[2] px-10 py-4 bg-[#1F6FEB] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#388BFD] transition-all shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
-                      {lock ? 'Bloqueado para Edição' : 'Salvar Lançamento'}
+                      {lock ? 'Bloqueado para Edição' : isSaving ? 'Salvando lançamento...' : isProcessingAttachment ? 'Processando anexo...' : 'Salvar Lançamento'}
                     </button>
                   </div>
                 </div>
